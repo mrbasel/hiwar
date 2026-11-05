@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+
+# Raw downloads and download state (rebuilt by scripts/download_*.sh)
+data/
+logs/
+survey/
+done.txt
+no_arabic_subs.txt
+
+# Built database (rebuilt by `python -m pipeline.build`)
+*.db
+*.db.tmp
+*.db-journal
+*.db-wal
+*.db-shm

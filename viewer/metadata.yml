@@ -1,0 +1,38 @@
+# Datasette config for browsing podcasts.db:
+#   uvx datasette podcasts.db -m viewer/metadata.yml --plugins-dir viewer/plugins --port 8765
+title: Podcasts
+databases:
+  podcasts:
+    queries:
+      search:
+        title: Search sections
+        description: Phrase search over section text and titles. Type Arabic as usual; it is normalized like the index.
+        sql: |-
+          select
+            s.id as section_id,
+            e.show,
+            e.title as episode,
+            s.title as section,
+            printf('%d:%02d', s.start_time / 60, s.start_time % 60) as starts_at,
+            e.url || '&t=' || cast(s.start_time as int) || 's' as link,
+            snippet(sections_fts, 1, '[', ']', '…', 20) as snippet
+          from sections_fts
+          join sections s on s.id = sections_fts.rowid
+          join episodes e on e.id = s.episode_id
+          where sections_fts match '"' || normalize(:q) || '"'
+          order by rank
+          limit 50
+      moments:
+        title: Find the moment in a section
+        description: Caption lines in one section that contain the words, with a link to each.
+        sql: |-
+          select
+            g.idx,
+            printf('%d:%02d', g.start_time / 60, g.start_time % 60) as at,
+            e.url || '&t=' || cast(g.start_time as int) || 's' as link,
+            g.text
+          from segments g
+          join episodes e on e.id = g.episode_id
+          where g.section_id = :section_id
+            and normalize(g.text) like '%' || normalize(:q) || '%'
+          order by g.idx
