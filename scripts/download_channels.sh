@@ -36,18 +36,20 @@ while read -r url; do
   log="logs/channel_$handle.log"
   while true; do
     echo "$(date '+%F %T') start $handle"
+    # Only check output from this attempt; the log may hold an earlier run.
+    skip=$(( $(cat "$log" 2>/dev/null | wc -l) + 1 ))
     DIR_TEMPLATE='%(channel)s' scripts/download_subs.sh \
       --match-filter "duration >= $min_duration" "$url/videos" >> "$log" 2>&1 &
     pid=$!
     hit=0
     while kill -0 "$pid" 2>/dev/null; do
       sleep 30
-      if grep -qE "$blocked" "$log"; then
+      if tail -n +"$skip" "$log" | grep -qE "$blocked"; then
         hit=1
         pkill -P "$pid"; kill "$pid" 2>/dev/null
         break
       fi
-      if no_captions "$log"; then
+      if no_captions <(tail -n +"$skip" "$log"); then
         echo "$(date '+%F %T') no captions in first $probe videos of $handle, skipping rest"
         echo "$handle" >> logs/channels_no_captions.txt
         # Stop pass 1 only; download_subs.sh still runs pass 3 to clean up.
