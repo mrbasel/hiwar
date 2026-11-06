@@ -19,3 +19,7 @@ no_arabic_subs.txt
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Web app
+node_modules/
+web/dist/
