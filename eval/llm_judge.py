@@ -1,0 +1,263 @@
+"""Grade pooled results with a model, after checking it agrees with you.
+
+    uv run python -m eval.llm_judge calibrate [--models M ...]
+    uv run python -m eval.llm_judge judge [--models M ...] [--depth N]
+
+calibrate  grades the results you already graded and reports how often each
+           model agrees with you, and where it doesn't.
+judge      grades the rest of the pool (top N of every run) that you haven't,
+           with the judge and check models; eval.data decides which of
+           those grades are accepted.
+
+Grades go to eval/llm_judgments.jsonl with the model and PROMPT_VERSION, and
+are reused on later runs. Bump PROMPT_VERSION (in eval.data) after changing
+the prompt so old grades aren't mixed in. Your own grades always take
+precedence.
+
+Decision models (typesafe/jev-*) go through OpenRouter's Decisions API and
+return a probability per grade; anything else is called as a chat model and
+asked for a short reason and a grade. The key comes from OPENROUTER_API_KEY,
+or opencode's saved OpenRouter key.
+"""
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import time
+import urllib.error
+import urllib.request
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from .data import (
+    CHECK_MODEL, JUDGE_MODEL, LLM_JUDGMENTS, PROMPT_VERSION,
+    grade_of, load_judgments, load_queries, load_runs, read_jsonl,
+)
+from .judge import pool
+
+OPENCODE_AUTH = Path.home() / ".local/share/opencode/auth.json"
+API = "https://openrouter.ai/api"
+
+INSTRUCTIONS = """How well does section_text serve someone who searched for query, \
+whose intent is described by need? section_text is a ~7 minute section of an \
+Arabic podcast transcript (auto-captions, often dialect, no punctuation, with \
+transcription errors). Judge the section on its own, not the whole episode. \
+Judge against need, not whether the query words appear. Judge the text, not \
+the section title, which is often inherited from a longer chapter. The topics \
+listed in need are examples, not a checklist: a section that discusses the \
+subject directly counts even if it covers only some of them. The speaker's \
+opinion doesn't matter; a skeptical or critical discussion of the subject is \
+still about it. Grading rules written in need take precedence."""
+
+LEVELS = [
+    "Not relevant: the section does not serve the need, even if the query words appear in it.",
+    "Partially relevant: the section touches the need only briefly or from the side, "
+    "such as a passing mention, a related topic, or a different angle than asked.",
+    "Highly relevant: a good part of the section, a minute or more, directly addresses the need.",
+]
+
+CHAT_PROMPT = f"""{INSTRUCTIONS}
+
+Grades:
+0 = {LEVELS[0]}
+1 = {LEVELS[1]}
+2 = {LEVELS[2]}
+
+Reply with only a JSON object: {{"reason": "<one short sentence>", "grade": <0, 1 or 2>}}"""
+
+
+def api_key():
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return os.environ["OPENROUTER_API_KEY"]
+    return json.loads(OPENCODE_AUTH.read_text())["openrouter"]["key"]
+
+
+def post(path, body, key, tries=4):
+    req = urllib.request.Request(
+        API + path, data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                 "User-Agent": "rawi-eval/0.1"},  # the default Python agent is blocked
+    )
+    for attempt in range(tries):
+        try:
+            return json.load(urllib.request.urlopen(req, timeout=120))
+        except urllib.error.HTTPError as err:
+            if err.code not in (408, 429, 500, 502, 503, 504) or attempt == tries - 1:
+                raise RuntimeError(f"{err.code}: {err.read()[:300]!r}") from err
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == tries - 1:
+                raise
+        time.sleep(2 ** attempt)
+
+
+def ask_decision(model, state, key):
+    r = post("/alpha/decisions", {"model": model, "state": state, "questions": {
+        "relevance": {"type": "score", "instructions": INSTRUCTIONS, "criteria": LEVELS}}}, key)
+    answer = r["answers"]["relevance"]
+    probs = {int(k): v for k, v in answer["probabilities"].items()}
+    return {"grade": max(probs, key=probs.get), "probs": probs,
+            "confidence": answer["confidence"], "served_by": r["model"]}
+
+
+def ask_chat(model, state, key):
+    r = post("/v1/chat/completions", {
+        "model": model, "temperature": 0, "max_tokens": 4000,
+        "messages": [{"role": "system", "content": CHAT_PROMPT},
+                     {"role": "user", "content": json.dumps(state, ensure_ascii=False)}],
+    }, key)
+    text = r["choices"][0]["message"]["content"] or ""
+    match = re.search(r"\{.*\}", text, re.S)
+    out = json.loads(match.group()) if match else {}
+    if out.get("grade") not in (0, 1, 2):
+        raise RuntimeError(f"unparseable reply: {text[:200]!r}")
+    return {"grade": out["grade"], "reason": out.get("reason", ""), "served_by": r.get("model", model)}
+
+
+def ask(model, state, key):
+    return (ask_decision if model.startswith("typesafe/") else ask_chat)(model, state, key)
+
+
+def section_for(conn, episode_id, start, end):
+    """The section covering most of a judged span."""
+    return conn.execute(
+        """SELECT e.title, s.title, s.text FROM sections s JOIN episodes e ON e.id = s.episode_id
+           WHERE s.episode_id = ? AND s.start_time < ? AND s.end_time > ?
+           ORDER BY min(s.end_time, ?) - max(s.start_time, ?) DESC LIMIT 1""",
+        (episode_id, end, start, end, start),
+    ).fetchone()
+
+
+def cached(model):
+    """{(qid, episode_id, start, end): line} for this model and prompt version."""
+    out = {}
+    for j in read_jsonl(LLM_JUDGMENTS):
+        if j["model"] == model and j["prompt_version"] == PROMPT_VERSION:
+            if "probs" in j:  # JSON turns the int grade keys into strings
+                j["probs"] = {int(k): v for k, v in j["probs"].items()}
+            out[(j["qid"], j["episode_id"], j["start"], j["end"])] = j
+    return out
+
+
+def grade_all(conn, model, todo, queries, key, workers=8):
+    """Grade (qid, episode_id, start, end) spans not graded yet; return all grades."""
+    have = cached(model)
+    missing = [t for t in todo if t not in have]
+
+    def state(span):
+        qid, episode_id, start, end = span
+        episode_title, section_title, text = section_for(conn, episode_id, start, end)
+        q = queries[qid]
+        return {"query": q["q"], "need": q["need"], "episode_title": episode_title,
+                "section_title": section_title, "section_text": text}
+
+    def work(job):
+        span, st = job
+        try:
+            return span, ask(model, st, key)
+        except Exception as err:
+            return span, err
+
+    jobs = [(span, state(span)) for span in missing]  # read the DB here, not in the threads
+    failed = 0
+    with ThreadPoolExecutor(workers) as ex, LLM_JUDGMENTS.open("a", encoding="utf-8") as f:
+        for n, (span, result) in enumerate(ex.map(work, jobs), 1):
+            if isinstance(result, Exception):
+                failed += 1
+                print(f"  failed {span}: {result}")
+                continue
+            line = {"qid": span[0], "episode_id": span[1], "start": span[2], "end": span[3],
+                    "model": model, "prompt_version": PROMPT_VERSION, **result}
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+            f.flush()
+            have[span] = line
+            if n % 25 == 0:
+                print(f"  {model}: {n}/{len(missing)}")
+    print(f"{model}: {len(todo) - len(missing)} cached, {len(missing) - failed} new, {failed} failed")
+    return have
+
+
+def report(model, pairs, queries, sections):
+    """pairs: [(span, human grade, model line)]."""
+    n = len(pairs)
+    agree = sum(h == m["grade"] for _, h, m in pairs)
+    far = sum(abs(h - m["grade"]) == 2 for _, h, m in pairs)
+    bias = sum(m["grade"] - h for _, h, m in pairs) / n
+    print(f"\n== {model}  ({n} results)")
+    print(f"exact agreement   {agree}/{n} = {agree / n:.0%}")
+    print(f"0 vs 2 mix-ups    {far}")
+    print(f"mean (model - you) {bias:+.2f}   (+ = more lenient than you)")
+    print(f"weighted kappa    {weighted_kappa([(h, m['grade']) for _, h, m in pairs]):.2f}")
+    confusion = Counter((h, m["grade"]) for _, h, m in pairs)
+    print("           model 0  model 1  model 2")
+    for h in range(3):
+        print(f"  you {h}  " + "".join(f"{confusion[(h, g)]:>9}" for g in range(3)))
+    if all("confidence" in m for _, _, m in pairs):
+        for t in (0.6, 0.8):
+            sure = [(h, m) for _, h, m in pairs if m["confidence"] >= t]
+            if sure:
+                ok = sum(h == m["grade"] for h, m in sure)
+                print(f"confidence >= {t}: {len(sure)}/{n} results, agreement {ok / len(sure):.0%}")
+    print("disagreements:")
+    for span, h, m in sorted(pairs, key=lambda p: p[0]):
+        if h != m["grade"]:
+            extra = m.get("reason") or f"p={m['probs']} conf={m['confidence']}"
+            print(f"  {span[0]} {queries[span[0]]['q']} | {sections[span]} | you {h}, model {m['grade']} | {extra}")
+
+
+def weighted_kappa(pairs, k=3):
+    """Agreement beyond chance, with near misses (1 vs 2) penalized less than far ones (0 vs 2)."""
+    n = len(pairs)
+    observed = sum((a - b) ** 2 for a, b in pairs) / n
+    ca, cb = Counter(a for a, _ in pairs), Counter(b for _, b in pairs)
+    expected = sum(ca[i] * cb[j] * (i - j) ** 2 for i in range(k) for j in range(k)) / n ** 2
+    return 1 - observed / expected if expected else 1.0
+
+
+def human_spans():
+    return {(qid, ep, s, e): g for (qid, ep), spans in load_judgments().items() for s, e, g in spans}
+
+
+def calibrate(conn, models, key):
+    queries = {q["id"]: q for q in load_queries()}
+    human = human_spans()
+    sections = {span: section_for(conn, span[1], span[2], span[3])[1] for span in human}
+    for model in models:
+        grades = grade_all(conn, model, list(human), queries, key)
+        report(model, [(s, h, grades[s]) for s, h in human.items() if s in grades], queries, sections)
+
+
+def judge(conn, models, depth, key):
+    queries = {q["id"]: q for q in load_queries()}
+    runs, judgments = load_runs(), load_judgments()
+    todo = [
+        (qid, r["episode_id"], r["start"], r["end"])
+        for qid in queries
+        for r in pool(runs, qid, depth)
+        if grade_of(judgments, qid, r) is None
+    ]
+    print(f"{len(todo)} pooled results without your grade")
+    for model in models:
+        grade_all(conn, model, todo, queries, key)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", choices=["calibrate", "judge"])
+    parser.add_argument("--models", nargs="+", default=[JUDGE_MODEL, CHECK_MODEL])
+    parser.add_argument("--depth", type=int, default=20, help="top N of each run to judge")
+    parser.add_argument("--db", default="podcasts.db")
+    args = parser.parse_args()
+
+    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+    key = api_key()
+    if args.mode == "calibrate":
+        calibrate(conn, args.models, key)
+    else:
+        judge(conn, args.models, args.depth, key)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<title>Judge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2f4f6; --surface: #ffffff; --ink: #18202b; --muted: #5d6876; --rule: #d5dbe2;
+    --signal: #2342c8; --active: #e3e9fb; --hover: #e8ecf0;
+    --g0: #f3c4c4; --g1: #f6e3a1; --g2: #b9e3b9; --empty: #d5dbe2;
+    --ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
+    --read: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+    color-scheme: light;
+  }
+  :root.dark {
+    --paper: #12161c; --surface: #1a1f27; --ink: #e4e8ee; --muted: #8c96a3; --rule: #2c333d;
+    --signal: #7d97ff; --active: #233056; --hover: #222831;
+    --g0: #7a3434; --g1: #7a6420; --g2: #2f6a3a; --empty: #2c333d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; display: grid; grid-template-columns: 300px 1fr; height: 100vh; font: 15px/1.6 var(--ui); color: var(--ink); background: var(--paper); }
+  a { color: var(--signal); }
+  nav { overflow-y: auto; border-right: 1px solid var(--rule); }
+  nav a { display: flex; justify-content: space-between; gap: 8px; padding: 6px 12px; color: inherit; text-decoration: none; cursor: pointer; }
+  nav a:hover { background: var(--hover); }
+  nav a.active { background: var(--active); }
+  nav a.done { color: var(--muted); }
+  nav small { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+  main { display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--rule); }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  .need { margin: 4px 0 0; color: var(--muted); }
+  .dots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .dot { width: 20px; height: 20px; border-radius: 3px; background: var(--empty); font-size: 11px; text-align: center; line-height: 20px; cursor: pointer; }
+  .dot.g0 { background: var(--g0); } .dot.g1 { background: var(--g1); } .dot.g2 { background: var(--g2); }
+  .dot.auto { background: none; border: 1px dashed var(--muted); color: var(--muted); line-height: 18px; }
+  .dot.current { outline: 2px solid var(--signal); outline-offset: 1px; }
+  article { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  article h2 { margin: 4px 0; font-size: 18px; font-weight: 600; }
+  .section-title { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
+  .text { white-space: pre-wrap; font: 18px/2 var(--read); max-width: 75ch; margin: 16px 0 0 auto; }
+  footer { padding: 10px 20px; border-top: 1px solid var(--rule); display: flex; gap: 12px; align-items: center; }
+  footer button { font: inherit; padding: 6px 14px; cursor: pointer; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  footer button.on { border-color: var(--signal); background: var(--active); }
+  footer .keys { margin-left: auto; color: var(--muted); font-size: 13px; }
+</style>
+<script>
+  // Before first paint, so the page doesn't flash light. Saved choice wins over the OS setting.
+  const saved = localStorage.getItem("theme");
+  if (saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.classList.add("dark");
+</script>
+</head>
+<body>
+<nav id="queries"></nav>
+<main>
+  <header>
+    <h1 id="q"></h1>
+    <p class="need" id="need" dir="ltr"></p>
+    <div class="dots" id="dots"></div>
+  </header>
+  <article id="item"></article>
+  <footer>
+    <button data-grade="0">0 not relevant</button>
+    <button data-grade="1">1 partial</button>
+    <button data-grade="2">2 highly relevant</button>
+    <span class="keys">keys: 0 1 2 grade · j next · k previous · d dark mode</span>
+    <button id="theme">◐</button>
+  </footer>
+</main>
+<script>
+let queries = [], qid = null, items = [], pos = 0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const time = (s) => new Date(s * 1000).toISOString().slice(11, 19);
+
+async function loadQueries() {
+  queries = await (await fetch("/api/queries")).json();
+  $("queries").innerHTML = queries.map((q) => `
+    <a data-qid="${q.id}" class="${q.id === qid ? "active" : ""} ${q.review === 0 ? "done" : ""}"
+       title="${q.judged} graded by you, ${q.review} to review, ${q.pooled} pooled">
+      <span>${q.id} <span dir="rtl">${esc(q.q)}</span></span><small>${q.review ? q.review + " to review" : "done"}</small>
+    </a>`).join("");
+}
+
+async function openQuery(id) {
+  qid = id;
+  const q = queries.find((q) => q.id === id);
+  $("q").textContent = `${q.id} · ${q.q}`;
+  $("need").textContent = q.need;
+  items = await (await fetch(`/api/pool?qid=${id}`)).json();
+  const first = items.findIndex(needsReview);
+  pos = first === -1 ? 0 : first;
+  await loadQueries();
+  render();
+}
+
+function render() {
+  $("dots").innerHTML = items.map((it, i) =>
+    `<span class="dot ${it.grade !== null ? "g" + it.grade : it.auto ? "auto" : ""} ${i === pos ? "current" : ""}" data-i="${i}">${it.grade ?? (it.auto ? "A" : "")}</span>`).join("");
+  const it = items[pos];
+  document.querySelectorAll("footer button").forEach((b) => b.classList.toggle("on", it && Number(b.dataset.grade) === it.grade));
+  if (!it) { $("item").innerHTML = "<p>No results to judge for this query.</p>"; return; }
+  $("item").innerHTML = `
+    <div class="meta">${pos + 1} / ${items.length} ·${it.grade === null && it.auto ? " <b>auto-graded</b> (grade it to override) ·" : ""} <bdi>${esc(it.show)}</bdi> · <bdi>${esc(it.date)}</bdi> ·
+      <a href="${esc(it.link)}" target="_blank" dir="ltr">${time(it.result.start)} – ${time(it.result.end)} ↗</a></div>
+    <h2 dir="auto">${esc(it.episode_title)}</h2>
+    <div class="text" dir="rtl">${esc(it.text)}</div>
+    <p class="section-title">Section title (often inherited from a longer chapter, so it may not match the text): <bdi>§${it.result.idx} ${esc(it.section_title)}</bdi></p>`;
+  $("item").scrollTop = 0;
+}
+
+async function grade(g) {
+  const it = items[pos];
+  if (!it) return;
+  await fetch("/api/judge", { method: "POST", body: JSON.stringify({ qid, result: it.result, grade: g }) });
+  it.grade = g;
+  const next = items.findIndex((x, i) => i > pos && needsReview(x));
+  if (next !== -1) pos = next;
+  else if (pos < items.length - 1) pos++;
+  await loadQueries();
+  render();
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.classList.toggle("dark");
+  localStorage.setItem("theme", dark ? "dark" : "light");
+}
+
+function needsReview(it) {
+  return it.grade === null && !it.auto;
+}
+
+function move(d) {
+  pos = Math.min(Math.max(pos + d, 0), items.length - 1);
+  render();
+}
+
+$("theme").addEventListener("click", toggleTheme);
+$("queries").addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (a) openQuery(a.dataset.qid);
+});
+$("dots").addEventListener("click", (e) => {
+  if (e.target.dataset.i) { pos = Number(e.target.dataset.i); render(); }
+});
+document.querySelector("footer").addEventListener("click", (e) => {
+  if (e.target.dataset.grade) grade(Number(e.target.dataset.grade));
+});
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "d") return toggleTheme();
+  if (!qid) return;
+  if ("012".includes(e.key)) grade(Number(e.key));
+  else if (e.key === "j") move(1);
+  else if (e.key === "k") move(-1);
+});
+
+loadQueries().then(() => {
+  const next = queries.find((q) => q.review > 0) ?? queries[0];
+  if (next) openQuery(next.id);
+});
+</script>
+</body>
+</html>
