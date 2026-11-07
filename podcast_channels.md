@@ -38,6 +38,7 @@ Subscriber and video counts as of 2026-11-04. Arabic auto-caption availability w
 | 28 | [إذاعة بوصلة](https://www.youtube.com/@CompassPodcasts) | 29,500 | 126 | Compass: بزنس قصمان, تنمية القادة, قصة رياضة, طبابة, أجنحة |
 | 29 | [Edraak Media](https://www.youtube.com/@edraakmedia) | 162,000 | 1400 | Edraak Media: بس مباشر, بوح |
 | 30 | [مخيال](https://www.youtube.com/@Mekhyal_sba) | 268,000 | 1300 | مخيال with Abdullah Al-Bandar |
+| 31 | [صفر لواحد](https://www.youtube.com/@ZTO__KSA) | 1,020,000 | 48 | Zero to One (tech/business): شفل, في ليب, Money 20/20, في المكتب, يوم مع, صفر لواحد .AI, من السوق. Downloaded per playlist, so each show gets its own folder; added 2026-11-07 |
 
 ## Single-show podcast channels
 
@@ -52,7 +53,7 @@ Subscriber and video counts as of 2026-11-04. Arabic auto-caption availability w
 | 7 | [مكتبة استديو](https://www.youtube.com/@Maktba_studio) | 274,000 | 129 | Maktaba Studio: رفوف |
 | 8 | [قصص عبدالرحمن الدعيلج](https://www.youtube.com/@aburakan_789) | 597,000 | 987 | قصصكم: stories/history |
 | 9 | [Hikmat Wehbi Podcast](https://www.youtube.com/@hikmatwehbipodcast) | 381,000 | 1900 | Hikmat Wehbi Podcast (Lebanon) |
-| 10 | [Yehia Tech](https://www.youtube.com/@yehiatech) | 383,000 | 850 | كلام في البرمجة (programming) |
+| 10 | [Yehia Tech](https://www.youtube.com/@yehiatech) | 383,000 | 850 | كلام في البرمجة (programming). The channel is mostly courses/tutorials, so only the [podcast playlist](https://www.youtube.com/playlist?list=PL8q8h6vqfkSUBH_JiV5-2fPmHuSIDABdW) is downloaded |
 | 11 | [شهادة بودكاست](https://www.youtube.com/@shahadapodcast) | 394,000 | 3000 | Shahada: people's stories |
 | 12 | [Mindset with Youssef Sabry](https://www.youtube.com/@YSMindset) | 273,000 | 711 | Youssef Sabry Mindset (Egypt) |
 | 13 | [بودكاست شي منسي podcast chimansi](https://www.youtube.com/@PodcastChimansi) | 287,000 | 825 | شي منسي (Morocco) |

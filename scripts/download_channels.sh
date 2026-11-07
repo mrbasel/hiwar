@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Download Arabic transcripts for every 20+ minute video on each channel's
 # Videos tab, one channel at a time, into data/<channel name>/.
+# A playlist URL (youtube.com/playlist?list=...) downloads just that playlist,
+# for channels that mix one podcast with non-podcast videos.
 # If YouTube rate-limits or asks for a bot check, stop, wait, and retry the
 # channel; done.txt makes every retry/re-run resume where it left off.
 # If the first $probe new videos of a channel (newest first) all lack Arabic
@@ -32,14 +34,20 @@ no_captions() {
 
 while read -r url; do
   [[ -z "$url" ]] && continue
-  handle="${url##*/}"
+  if [[ "$url" == *list=* ]]; then
+    handle="${url##*list=}"
+    target="$url"
+  else
+    handle="${url##*/}"
+    target="$url/videos"
+  fi
   log="logs/channel_$handle.log"
   while true; do
     echo "$(date '+%F %T') start $handle"
     # Only check output from this attempt; the log may hold an earlier run.
     skip=$(( $(cat "$log" 2>/dev/null | wc -l) + 1 ))
     DIR_TEMPLATE='%(channel)s' scripts/download_subs.sh \
-      --match-filter "duration >= $min_duration" "$url/videos" >> "$log" 2>&1 &
+      --match-filter "duration >= $min_duration" "$target" >> "$log" 2>&1 &
     pid=$!
     hit=0
     while kill -0 "$pid" 2>/dev/null; do
