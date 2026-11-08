@@ -1,0 +1,567 @@
+# Every YouTube source scripts/update.sh downloads.
+#
+# url      channel (@handle; downloads its Videos tab) or playlist (?list=...); required
+# name     show or channel name, shown in logs and --status
+# group    network the source belongs to
+# notes    anything worth knowing about it
+# enabled  false to stop downloading it; default true
+# folder   folder under data/ to save into; default the channel name, or the
+#          playlist title for playlists
+#
+# Use playlists for channels that mix podcasts with other videos, or to give each
+# show its own folder. A new source is downloaded in full on the next run.
+# podcast_channels.md has background on each channel.
+
+# --- Playlists ---
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnFmi6C5-aKc6NQ_uXmmA5TP"
+name = "بودكاست آدم"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnEc8c8ZFqPbF4wJBjWnbaAE"
+name = "بودكاست أرباح"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnGNLaJap1VsuqgCEM7aIroq"
+name = "بودكاست أرباع"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnG9JQSWJ3RHEqION3UL3ITk"
+name = "بودكاست السوق"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnFXTKtkgaHgFxMRNButo9eb"
+name = "بودكاست النشرة السينمائية"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnGwvIudtsVFIuKb4N_ods18"
+name = "بودكاست ذا قال"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnH6BfF8o6I3QQDCPYhwjBWZ"
+name = "بودكاست سقراط"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnE5GVCM_aZtWCLzCzHYA-ho"
+name = "بودكاست سوالف بزنس"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnEls2kOkiV2CXMezV6oaq8I"
+name = "بودكاست فنجان"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnEuww8BC6HTe-v_8P--aeSV"
+name = "بودكاست مربّع"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLeNNUmE-BlnGmvn7CrbD30RSfNkeqgx22"
+name = "بودكاست مرتدة"
+group = "thmanyah"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PL7oUBfFaaMGS7xST4i9maeMd0JkRR5O03"
+name = "بدون ورق"
+group = "BidonWaraq"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLRJcweuRKcSPmQ8udaH-uCaQL1IC2rhfq"
+name = "بودكاست أروقة"
+group = "Mukhtalif"
+notes = "Also on @Mukhtalif_Career; listed here so the show keeps its own folder."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLRJcweuRKcSNLQvq3g1guO92LVLyXxUOM"
+name = "بودكاست بترولي"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLuNDjeebaYbijd0Y16AisTRG9VW-UBLrq"
+name = "بودكاست زخم"
+group = "faragh"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLuNDjeebaYbg0eFKE_3IIZLCvgQucdSfs"
+name = "بودكاست عدد"
+group = "faragh"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PL5nS8TkbDMtIzjP6fOLPHiF_3XzVN43c-"
+name = "ديوانية محفوف"
+group = "Mahfoof"
+notes = "Also on @bymahfoof; listed here so the show keeps its own folder."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLfOOZAdeXSKgwQNfjILBX-vlcvuPCMF0F"
+name = "بودكاست شفل"
+group = "Zero to One"
+notes = "@ZTO__KSA is downloaded per playlist, so each show gets its own folder."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLWzYftR0LQYM"
+name = "بودكاست في ليب"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLDY7ovZXebk8"
+name = "بودكاست Money 20/20"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLfOOZAdeXSKhgSvvFbr__BT5d3JVN8SG7"
+name = "في المكتب"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLfOOZAdeXSKhNv002p9hoIR3-n6YxBdvs"
+name = "يوم مع"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLJ1c_xE-No-w"
+name = "صفر لواحد .AI"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLRtNFqYx1Y-E"
+name = "من السوق"
+group = "Zero to One"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PL8q8h6vqfkSUBH_JiV5-2fPmHuSIDABdW"
+name = "كلام في البرمجة"
+group = "Yehia Tech"
+notes = "The channel is mostly courses/tutorials, so only the podcast playlist is downloaded."
+folder = "Yehia Tech"
+
+# --- Channels ---
+
+[[source]]
+url = "https://www.youtube.com/@Mukhtalif_Career"
+name = "إذاعة مختلف"
+
+[[source]]
+url = "https://www.youtube.com/@MicsPodc"
+name = "Mics مايكس"
+
+[[source]]
+url = "https://www.youtube.com/@AtheerPlatform"
+name = "Atheer - أثير"
+
+[[source]]
+url = "https://www.youtube.com/@ArabCastAE"
+name = "عرب كاست"
+
+[[source]]
+url = "https://www.youtube.com/@jamstudiosa"
+name = "جام ستديو"
+
+[[source]]
+url = "https://www.youtube.com/@MindKSA"
+name = "مايند | Mind"
+
+[[source]]
+url = "https://www.youtube.com/@Sharqyouth"
+name = "Al Sharq Youth"
+
+[[source]]
+url = "https://www.youtube.com/@asharqpodcasts"
+name = "Asharq Podcasts | الشرق بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@MazeejStudios"
+name = "مزيج - Mazeej"
+
+[[source]]
+url = "https://www.youtube.com/@tpp.network"
+name = "TPP Network"
+
+[[source]]
+url = "https://www.youtube.com/@elpodcasters"
+name = "El-Podcasters - البودكاسترز"
+
+[[source]]
+url = "https://www.youtube.com/@Studio77eg"
+name = "STUDIO 77"
+
+[[source]]
+url = "https://www.youtube.com/@Nebrqa"
+name = "نبراس"
+
+[[source]]
+url = "https://www.youtube.com/@thmanyahsports"
+name = "رياضة ثمانية"
+
+[[source]]
+url = "https://www.youtube.com/@arabicpost"
+name = "عربي بوست - Arabic Post"
+
+[[source]]
+url = "https://www.youtube.com/@Takhayaal"
+name = "Takhayaal - تخيل"
+
+[[source]]
+url = "https://www.youtube.com/@Wathbh"
+name = "وثبة"
+
+[[source]]
+url = "https://www.youtube.com/@Shympod8"
+name = "إذاعة شِيم"
+
+[[source]]
+url = "https://www.youtube.com/@Insan_broadcast"
+name = "insan_podcast"
+
+[[source]]
+url = "https://www.youtube.com/@thestage_sa"
+name = "The Stage l ذا ستيج"
+
+[[source]]
+url = "https://www.youtube.com/@RashmNet"
+name = "إذاعة رشم"
+
+[[source]]
+url = "https://www.youtube.com/@AkkasCO"
+name = "عكاس"
+
+[[source]]
+url = "https://www.youtube.com/@Alphacast.Official"
+name = "Alphacast - ألفا كاست"
+
+[[source]]
+url = "https://www.youtube.com/@Qussas"
+name = "شبكة قصص | Qussas Network"
+
+[[source]]
+url = "https://www.youtube.com/@Sowtmedia"
+name = "Sowt | صوت"
+
+[[source]]
+url = "https://www.youtube.com/@Kolaim_"
+name = "إذاعة كُلَيم"
+
+[[source]]
+url = "https://www.youtube.com/@RadAndTv"
+name = "الإذاعة والتلفاز"
+
+[[source]]
+url = "https://www.youtube.com/@CompassPodcasts"
+name = "إذاعة بوصلة"
+
+[[source]]
+url = "https://www.youtube.com/@edraakmedia"
+name = "Edraak Media"
+
+[[source]]
+url = "https://www.youtube.com/@Mekhyal_sba"
+name = "مخيال"
+
+[[source]]
+url = "https://www.youtube.com/@ABtalks"
+name = "#ABtalks"
+
+[[source]]
+url = "https://www.youtube.com/@bymahfoof"
+name = "محفوف"
+
+[[source]]
+url = "https://www.youtube.com/@areekapodcast"
+name = "أريـــكة"
+
+[[source]]
+url = "https://www.youtube.com/@riwaythom"
+name = "بودكاست روايتهم"
+
+[[source]]
+url = "https://www.youtube.com/@fhdalbshara"
+name = "Fhdalbshara فهد البشاره"
+
+[[source]]
+url = "https://www.youtube.com/@samaqudspl"
+name = "SamaQuds"
+
+[[source]]
+url = "https://www.youtube.com/@Maktba_studio"
+name = "مكتبة استديو"
+
+[[source]]
+url = "https://www.youtube.com/@aburakan_789"
+name = "قصص عبدالرحمن الدعيلج"
+
+[[source]]
+url = "https://www.youtube.com/@hikmatwehbipodcast"
+name = "Hikmat Wehbi Podcast"
+
+[[source]]
+url = "https://www.youtube.com/@shahadapodcast"
+name = "شهادة بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@YSMindset"
+name = "Mindset with Youssef Sabry"
+
+[[source]]
+url = "https://www.youtube.com/@PodcastChimansi"
+name = "بودكاست شي منسي podcast chimansi"
+
+[[source]]
+url = "https://www.youtube.com/@syriapodcast"
+name = "سوريا بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@Badersaaj"
+name = "Jawla Channel | Lawyer Bader Saif Alaskar"
+
+[[source]]
+url = "https://www.youtube.com/@papersamwichChannel"
+name = "PaperSamwich ساندوتش ورقي"
+
+[[source]]
+url = "https://www.youtube.com/@Tanwenmedia"
+name = "تنوين بودكاست  | Tanween Podcasts"
+
+[[source]]
+url = "https://www.youtube.com/@tareekhuna_ar"
+name = "تاريخنا"
+
+[[source]]
+url = "https://www.youtube.com/@Amtaar__sa"
+name = "أمتار"
+
+[[source]]
+url = "https://www.youtube.com/@ALYEMENpodcast"
+name = "اليمن بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@alsudanpodcast"
+name = "السودان بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@iranpodcastar"
+name = "إيران بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@trendzpodcast"
+name = "Trendz Podcast | تريندز بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@ilhamzidouhia"
+name = "ilhamiyate Podcast"
+
+[[source]]
+url = "https://www.youtube.com/@GLASSROOMPodcast"
+name = "GLASSROOM"
+
+[[source]]
+url = "https://www.youtube.com/@shoatt"
+name = "شوط"
+
+[[source]]
+url = "https://www.youtube.com/@AlDueto"
+name = "بودكاست الدويتو"
+
+[[source]]
+url = "https://www.youtube.com/@onthebench_"
+name = "OTB على البنش"
+
+[[source]]
+url = "https://www.youtube.com/@arahmanmagdyy"
+name = "Abdulrahman Magdy - عبدالرحمن مجدي"
+
+[[source]]
+url = "https://www.youtube.com/@albedah_eye"
+name = "بودكاست دائرة - عبدالرحمن البداح"
+
+[[source]]
+url = "https://www.youtube.com/@podcastwithnayla"
+name = "Podcast With Nayla"
+
+[[source]]
+url = "https://www.youtube.com/@BastPodcast"
+name = "بسط بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@podcastwnos"
+name = "Podcast w Nos"
+
+[[source]]
+url = "https://www.youtube.com/@AtabatPodcast"
+name = "بودكاست عتبات"
+
+[[source]]
+url = "https://www.youtube.com/@mahmoud_alhalabi"
+name = "محمود الحلبي (جوكاست)"
+
+[[source]]
+url = "https://www.youtube.com/@elmaal.elhalal"
+name = "المال الحلال - El Mal El Halal"
+
+[[source]]
+url = "https://www.youtube.com/@Rayan_Hayek"
+name = "Rayan Hayek - ريان حايك"
+
+[[source]]
+url = "https://www.youtube.com/@Almpodcast1"
+name = "الم"
+
+[[source]]
+url = "https://www.youtube.com/@HossamAntikka"
+name = "Hossam Antikka"
+
+[[source]]
+url = "https://www.youtube.com/@Mfazatpc"
+name = "مفازات"
+
+[[source]]
+url = "https://www.youtube.com/@waraaqsa"
+name = "Waraaq | وراق"
+
+[[source]]
+url = "https://www.youtube.com/@AlaabGaming"
+name = "Alaab - ألعاب"
+
+[[source]]
+url = "https://www.youtube.com/@ElHalEhPodcast"
+name = "الحل إيه؟ مع د. رباب المهدي"
+
+[[source]]
+url = "https://www.youtube.com/@bilalfraiha"
+name = "Bilal Fraiha"
+
+[[source]]
+url = "https://www.youtube.com/@Ninety-Six-Podcast"
+name = "Ninety-Six Podcast"
+
+[[source]]
+url = "https://www.youtube.com/@NOORCAST-DEEN"
+name = "NoorCast | نوركاست"
+
+[[source]]
+url = "https://www.youtube.com/@Fekhatresual"
+name = "في خاطري سؤال"
+
+[[source]]
+url = "https://www.youtube.com/@Gamdkwt"
+name = "غـمـد"
+
+[[source]]
+url = "https://www.youtube.com/@Jinai_Mukhtalif"
+name = "جنائي مختلف"
+
+[[source]]
+url = "https://www.youtube.com/@mohannedmajeed1"
+name = "Mohanned Majeed | مهند مجيد"
+
+[[source]]
+url = "https://www.youtube.com/@Jim_sin"
+name = "jim Sen"
+
+[[source]]
+url = "https://www.youtube.com/@RWAPodcast"
+name = "RWA Podcast حوارات مع عباس"
+
+[[source]]
+url = "https://www.youtube.com/@G.Talks.Official"
+name = "GTalks"
+
+[[source]]
+url = "https://www.youtube.com/@TouilTalks"
+name = "TOUIL TALKS"
+
+[[source]]
+url = "https://www.youtube.com/@Wahe4"
+name = "بودكاست وعي"
+
+[[source]]
+url = "https://www.youtube.com/@MatnPlatform"
+name = "Matn - متن"
+
+[[source]]
+url = "https://www.youtube.com/@directionoman"
+name = "Direction"
+
+[[source]]
+url = "https://www.youtube.com/@AlGhabouk"
+name = "بودكاست الغبوق"
+
+[[source]]
+url = "https://www.youtube.com/@Abwab_podcast"
+name = "بودكاست أبواب"
+
+[[source]]
+url = "https://www.youtube.com/@studioaljanoub"
+name = "Studio Al Janoub l ستوديو الجنوب"
+
+[[source]]
+url = "https://www.youtube.com/@Europesarabpodcast"
+name = "عرب أوروبا بودكاست"
+
+[[source]]
+url = "https://www.youtube.com/@metraqah"
+name = "بودكاست مطرقة"
+
+[[source]]
+url = "https://www.youtube.com/@RewayaPodcast"
+name = "Rewaya Podcast"
+
+[[source]]
+url = "https://www.youtube.com/@kenazadvisors"
+name = "Kenaz - كِنـــاز"
+
+[[source]]
+url = "https://www.youtube.com/@dirhampodcast"
+name = "Dirham Podcast - بودكاست درهم"
+
+[[source]]
+url = "https://www.youtube.com/@SAM6TIME"
+name = "SAM6TIME"
+
+[[source]]
+url = "https://www.youtube.com/@Moneim88"
+name = "مُنعم - Moneim"
+
+[[source]]
+url = "https://www.youtube.com/@RudhaChannel"
+name = "Rudha ردهة"
+
+[[source]]
+url = "https://www.youtube.com/@khalejiatv"
+name = "روتانا خليجية"
+
+[[source]]
+url = "https://www.youtube.com/@DroosOnline4u"
+name = "دروس أونلاين"
+
+[[source]]
+url = "https://www.youtube.com/@daqaeqnet"
+name = "Daqaeq net - دقائق"
+
+[[source]]
+url = "https://www.youtube.com/@Mujtamaorg"
+name = "مجتمع Mujtama"
+
+[[source]]
+url = "https://www.youtube.com/@Ne3rafChannel"
+name = "Ne3raf | نعرف"
+
+[[source]]
+url = "https://www.youtube.com/@Drkhalidaljaber"
+name = "قناة د خالد بن حمد الجابر"
+
+[[source]]
+url = "https://www.youtube.com/@Buckrahkw"
+name = "بكره"
+
+[[source]]
+url = "https://www.youtube.com/@Almalazksa"
+name = "AlMalaz  ||  الملز"

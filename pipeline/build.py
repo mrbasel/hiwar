@@ -1,29 +1,21 @@
-"""Build the podcasts database from the raw downloads in `data/`.
+"""Add downloaded episodes to the database.
 
-    uv run python -m pipeline.build DATA_DIR DB_PATH [--limit N] [--workers N]
+Called by `pipeline.update` after downloading. Builds every video with status
+'downloaded', except those from sources still backfilling: a channel's
+boilerplate is learned from its whole history, so a new channel waits until
+all of it is downloaded.
 
-Always rebuilds from scratch: writes `DB_PATH.tmp` and renames it over DB_PATH
-only when the build succeeds, so a failed run never leaves a half-built DB.
-`data/` is only read.
+Per channel (one worker each): hash the 8-word runs of every downloaded
+episode of the channel, old and new, to find its boilerplate; then clean each
+pending episode, merge its caption lines into utterances and cut it into
+sections. Episodes already in the database are never changed. Each channel is
+committed on its own, so an interrupted build resumes on the next run.
 
-1. Read every `.info.json` that has a transcript file next to it.
-2. Per channel (one worker each): hash the 8-word runs of every episode to
-   find that channel's boilerplate, then clean each episode, merge its
-   caption lines into utterances and cut it into sections.
-3. Insert into SQLite and build the full-text index.
-
---limit N builds only N episodes, spread over channels and dates, for quick
-checks. Boilerplate is still learned from every episode of each channel, so
-the cleaning matches a full build.
+Into an empty database, this builds everything: that's how to rebuild.
 """
 
-import argparse
-import os
 import sys
-import time
 from collections import Counter, defaultdict
-from multiprocessing import Pool
-from pathlib import Path
 
 from . import db
 from .clean import clean_segments, episode_keys, find_boilerplate, ngram_hashes
@@ -36,61 +28,66 @@ def log(msg):
     print(msg, file=sys.stderr, flush=True)
 
 
-def read_info_safe(path):
-    try:
-        return read_info(path), None
-    except Exception as e:  # half-written by a running download, or malformed
-        return None, f"{path}: {e!r}"
-
-
 def process_channel(task):
-    """Boilerplate for one channel, then (episode, sections, removed) for the selected episodes."""
-    episodes, selected = task
+    """Boilerplate from all of one channel's episodes, then build the selected ones.
+
+    Returns (built, skipped, stats, errors): built is a list of (episode,
+    sections, words removed), skipped of (video id, reason). Videos that
+    couldn't be read are in neither and stay queued.
+    """
+    data_dir, paths, selected = task
     stats = Counter()
     errors = []
 
     hashes = []
-    for ep in episodes:
+    for path in paths:
         try:
-            segments, _ = find_transcript(ep["path"])
-        except Exception as e:
+            segments, _ = find_transcript(data_dir / path)
+        except Exception as e:  # malformed, or deleted since
             segments = None
-            errors.append(f"{ep['path']}: {e!r}")
+            errors.append(f"{path}: {e!r}")
         if segments:
             hashes.append(ngram_hashes(episode_keys(segments)))
     boilerplate = find_boilerplate(hashes)
     del hashes
     stats["boilerplate_ngrams"] = len(boilerplate)
 
-    results = []
-    for ep in episodes:
-        if ep["id"] not in selected:
-            continue
+    built, skipped = [], []
+    for video_id, path in selected:
+        base = data_dir / path
         try:
-            segments, source = find_transcript(ep["path"])
-        except Exception:
-            stats["transcript_unreadable"] += 1  # already logged in the first pass
+            ep = read_info(base.with_name(base.name + ".info.json"))
+            segments, source = find_transcript(base)
+        except Exception as e:
+            stats["unreadable"] += 1
+            errors.append(f"{path}: {e!r}")
+            continue
+        if ep is None:  # transcript deleted since it was downloaded
+            stats["no_transcript"] += 1
+            skipped.append((video_id, "no_transcript"))
             continue
         if segments is None:
             stats["not_arabic"] += 1
+            skipped.append((video_id, "not_arabic"))
             continue
         segments, removed = clean_segments(segments, boilerplate)
         segments = merge_lines(segments)
         sections = build_sections(segments, ep["chapters"])
         if not sections:
             stats["empty_after_cleaning"] += 1
+            skipped.append((video_id, "empty_after_cleaning"))
             continue
-        results.append(({**ep, "transcript_source": source}, sections, removed))
+        built.append(({**ep, "transcript_source": source}, sections, removed))
         stats["episodes"] += 1
         stats[f"source_{source}"] += 1
         stats["words_removed"] += removed
-    return episodes[0], results, stats, errors
+    return built, skipped, stats, errors
 
 
 def pick(by_channel, limit):
-    """Up to `limit` episode ids, round-robin over channels, evenly spread over each channel's dates."""
+    """Up to `limit` videos, round-robin over channels, evenly spread over each channel's dates."""
     if limit is None:
-        return {ep["id"] for eps in by_channel.values() for ep in eps}
+        return {v for vs in by_channel.values() for v in vs}
     channels = sorted(by_channel.values(), key=len, reverse=True)
     quota = Counter()
     while sum(quota.values()) < limit and any(quota[i] < len(c) for i, c in enumerate(channels)):
@@ -98,100 +95,64 @@ def pick(by_channel, limit):
             if quota[i] < len(c) and sum(quota.values()) < limit:
                 quota[i] += 1
     chosen = set()
-    for i, eps in enumerate(channels):
-        eps = sorted(eps, key=lambda e: e["date"] or "")
+    for i, vs in enumerate(channels):
+        vs = sorted(vs, key=lambda v: v[2] or "")
         k = quota[i]
-        chosen.update(eps[int((j + 0.5) * len(eps) / k)]["id"] for j in range(k))
+        chosen.update(vs[int((j + 0.5) * len(vs) / k)] for j in range(k))
     return chosen
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("data_dir", type=Path)
-    ap.add_argument("db_path", type=Path)
-    ap.add_argument("--limit", type=int, help="only build this many episodes")
-    ap.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1),
-                    help="parallel processes (each holds one channel's hashes in memory)")
-    args = ap.parse_args()
-    t0 = time.time()
+def build_pending(conn, data_dir, pool, limit=None):
+    """Build the queued videos. --limit N builds only N of them, for quick checks."""
+    built_ids = {row[0] for row in conn.execute("SELECT id FROM episodes")}
+    pending = defaultdict(list)
+    for video_id, channel_id, path, date in conn.execute(
+        "SELECT v.id, v.channel_id, v.path, v.upload_date FROM videos v"
+        " LEFT JOIN sources s ON s.url = v.source"
+        " WHERE v.status = 'downloaded' AND coalesce(s.status, '') != 'backfilling'"
+    ):
+        if video_id in built_ids:  # e.g. queued again by hand
+            db.set_video_status(conn, video_id, "built")
+        else:
+            pending[channel_id].append((video_id, path, date))
+    conn.commit()
+    selected = pick(pending, limit)
+    held = conn.execute(
+        "SELECT count(*) FROM videos v JOIN sources s ON s.url = v.source"
+        " WHERE v.status = 'downloaded' AND s.status = 'backfilling'"
+    ).fetchone()[0]
+    log(f"building {len(selected)} episodes in {len(pending)} channels"
+        + (f" ({held} more wait for their source to finish backfilling)" if held else ""))
 
-    info_paths = sorted(args.data_dir.glob("*/*.info.json"))
-    log(f"reading {len(info_paths)} info.json files ...")
-    episodes, errors, seen = [], [], set()
-    totals = Counter(info_files=len(info_paths))
-    with Pool(args.workers) as pool:
-        for ep, err in pool.imap_unordered(read_info_safe, info_paths, chunksize=16):
-            if err:
-                errors.append(err)
-                totals["unreadable"] += 1
-            elif ep is None:
-                totals["no_transcript"] += 1
-            elif ep["id"] in seen:
-                totals["duplicates"] += 1
-            else:
-                seen.add(ep["id"])
-                episodes.append(ep)
+    tasks = []
+    for channel_id, videos in pending.items():
+        chosen = [(v, p) for v, p, d in videos if (v, p, d) in selected]
+        if not chosen:
+            continue
+        paths = [p for (p,) in conn.execute(
+            "SELECT path FROM videos WHERE channel_id IS ? AND path IS NOT NULL"
+            " AND status IN ('downloaded', 'built', 'skipped')",
+            (channel_id,),
+        )]
+        tasks.append((data_dir, paths, chosen))
+    # Biggest channels first, so the last workers don't start a long one alone.
+    tasks.sort(key=lambda t: len(t[1]), reverse=True)
 
-        by_channel = defaultdict(list)
-        for ep in sorted(episodes, key=lambda e: e["path"]):
-            by_channel[ep["channel_id"]].append(ep)
-        selected = pick(by_channel, args.limit)
-        log(f"{len(episodes)} episodes with transcripts in {len(by_channel)} channels; building {len(selected)}")
-
-        tmp = args.db_path.with_name(args.db_path.name + ".tmp")
-        tmp.unlink(missing_ok=True)
-        conn = db.create(tmp)
-        per_channel = {}
-        # Biggest channels first, so the last workers don't start a long one alone.
-        tasks = [
-            (eps, {e["id"] for e in eps} & selected)
-            for eps in sorted(by_channel.values(), key=len, reverse=True)
-        ]
-        for first, results, stats, errs in pool.imap_unordered(process_channel, tasks):
-            errors += errs
-            totals.update(stats)
-            db.insert_channel(conn, first)
-            for episode, sections, removed in results:
-                db.insert_episode(conn, episode, sections, removed)
-            conn.commit()
-            name = first["channel"] or first["channel_id"]
-            per_channel[name] = dict(stats)
+    totals, errors, per_channel = Counter(), [], {}
+    for built, skipped, stats, errs in pool.imap_unordered(process_channel, tasks):
+        errors += errs
+        totals.update(stats)
+        for episode, sections, removed in built:
+            db.insert_channel(conn, episode)
+            db.insert_episode(conn, episode, sections, removed)
+            db.set_video_status(conn, episode["id"], "built")
+        for video_id, reason in skipped:
+            db.set_video_status(conn, video_id, "skipped", reason)
+        conn.commit()
+        if built:
+            name = built[0][0]["channel"] or built[0][0]["channel_id"]
+            per_channel[name] = stats["episodes"]
             log(f"  {name}: {stats['episodes']} episodes, {stats['boilerplate_ngrams']} boilerplate runs, "
                 f"{stats['words_removed']} words removed")
-
-    counts = {
-        t: conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-        for t in ("channels", "episodes", "sections", "segments")
-    }
-    words = conn.execute("SELECT coalesce(sum(word_count), 0) FROM episodes").fetchone()[0]
-    if counts["episodes"] == 0:
-        conn.close()
-        sys.exit("no episodes built; keeping the old database")
-
     totals.pop("boilerplate_ngrams", None)
-    info = {
-        "built_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "seconds": round(time.time() - t0),
-        "data_dir": str(args.data_dir),
-        "limit": args.limit,
-        "counts": counts,
-        "words": words,
-        "totals": dict(totals),
-        "per_channel": per_channel,
-        "errors": errors,
-    }
-    log("building full-text index ...")
-    db.finish(conn, info)
-    os.replace(tmp, args.db_path)
-
-    log(f"\ndone in {info['seconds']}s -> {args.db_path}")
-    log("  " + ", ".join(f"{v} {k}" for k, v in counts.items()) + f", {words:,} words")
-    log("  " + ", ".join(f"{v} {k}" for k, v in sorted(totals.items())))
-    for err in errors[:10]:
-        log(f"  error: {err}")
-    if len(errors) > 10:
-        log(f"  ... {len(errors) - 10} more errors in build_info")
-
-
-if __name__ == "__main__":
-    main()
+    return totals, per_channel, errors
