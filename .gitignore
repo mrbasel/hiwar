@@ -23,3 +23,6 @@ no_arabic_subs.txt
 # Web app
 node_modules/
 web/dist/
+
+# Embeddings (built by search.embed)
+embeddings/

@@ -8,6 +8,7 @@ METHODS so `eval.retrieve` runs them.
 import re
 
 from pipeline.normalize import normalize
+from search import semantic
 
 # Same as web/src/search.ts, so the baseline is what the site serves.
 HEADING_WEIGHT = 3
@@ -36,6 +37,35 @@ def bm25(conn, query, k):
     ]
 
 
+def semantic_bge_m3(conn, query, k):
+    """Embeddings of episode metadata (title, description, chapters) with BGE-M3."""
+    return semantic.search(conn, query, k, "baai/bge-m3")
+
+
+RRF_K = 60  # the usual constant; larger flattens the gap between ranks
+RRF_DEPTH = 50  # results taken from each method before fusing
+
+
+def rrf(rankings, k):
+    """Reciprocal rank fusion: each section scores sum(1 / (RRF_K + rank)) over the rankings."""
+    scores, results = {}, {}
+    for ranking in rankings:
+        for rank, r in enumerate(ranking, 1):
+            key = (r["episode_id"], r["idx"])
+            scores[key] = scores.get(key, 0) + 1 / (RRF_K + rank)
+            results.setdefault(key, r)
+    best = sorted(scores, key=scores.get, reverse=True)[:k]
+    return [{**{f: results[key][f] for f in ("episode_id", "idx", "start", "end")},
+             "score": round(scores[key], 5)} for key in best]
+
+
+def hybrid_bge_m3(conn, query, k):
+    """BM25 and semantic_bge_m3, fused with RRF."""
+    return rrf([bm25(conn, query, RRF_DEPTH), semantic_bge_m3(conn, query, RRF_DEPTH)], k)
+
+
 METHODS = {
     "bm25": bm25,
+    "semantic_bge_m3": semantic_bge_m3,
+    "hybrid_bge_m3": hybrid_bge_m3,
 }
