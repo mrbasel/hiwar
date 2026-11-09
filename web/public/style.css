@@ -78,6 +78,21 @@ mark {
   cursor: pointer;
 }
 
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #c9d0da;
+  cursor: pointer;
+}
+
+.option input {
+  accent-color: var(--signal);
+  margin: 0;
+}
+
 /* Page body */
 
 main {
@@ -136,6 +151,22 @@ main {
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+.via {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.badge.keyword { color: #6a4a00; background: #fff4d1; }
+.badge.semantic { color: var(--signal); background: #e8ecff; }
 
 .section {
   border-top: 1px solid var(--rule);

@@ -1,19 +1,31 @@
-// Full-text search over sections (FTS5 + BM25), with the matching moments
-// inside each section found from its timestamped segments.
+// Search over sections: full-text (FTS5 + BM25), or hybrid with semantic
+// search fused by reciprocal rank fusion. The matching moments inside each
+// section are found from its timestamped segments.
 
 import { DatabaseSync } from "node:sqlite";
 import { words } from "./normalize.js";
-import { parseQuery } from "./query.js";
+import { parseQuery, type ParsedQuery } from "./query.js";
+import { semanticSearch, type Index } from "./semantic.js";
 
 // BM25 column weights: heading (episode + section title), transcript text.
 const HEADING_WEIGHT = 3;
 const TEXT_WEIGHT = 1;
 const MOMENTS_PER_RESULT = 3;
+// Same as eval/methods.py, so the eval scores what the site serves.
+const RRF_K = 60;
+const RRF_DEPTH = 50;
+const FALLBACK_SNIPPET_CHARS = 300;
 
 export interface SearchParams {
   q: string;
   page?: number;
   limit?: number;
+  mode?: "hybrid" | "keyword"; // keyword: full-text search only
+}
+
+export interface Semantic {
+  index: Index;
+  key: string;
 }
 
 interface Hit {
@@ -105,38 +117,128 @@ function placeholders(n: number): string {
   return Array(n).fill("?").join(", ");
 }
 
-export function search(db: DatabaseSync, params: SearchParams) {
-  const started = performance.now();
-  const parsed = parseQuery(params.q);
-  if (!parsed) throw new QueryError("Type at least one word to search for.");
+const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
+  e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration`;
 
-  const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
-  const page = Math.max(params.page ?? 1, 1);
-
-  const from = `
+const FTS_FROM = `
     FROM sections_fts
     JOIN sections s ON s.id = sections_fts.rowid
     JOIN episodes e ON e.id = s.episode_id
     WHERE sections_fts MATCH ?`;
 
-  let total: number;
-  let hits: Hit[];
+function parse(params: SearchParams) {
+  const parsed = parseQuery(params.q);
+  if (!parsed) throw new QueryError("Type at least one word to search for.");
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+  const page = Math.max(params.page ?? 1, 1);
+  return { parsed, limit, page };
+}
+
+function fts<T>(run: () => T): T {
   try {
-    total = Number(db.prepare(`SELECT count(*) AS n ${from}`).get(parsed.match)!.n);
-    hits = db
-      .prepare(
-        `SELECT s.id, s.idx, s.title, s.start_time, s.end_time,
-                e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration,
-                bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT}) AS score
-         ${from}
-         ORDER BY score
-         LIMIT ? OFFSET ?`,
-      )
-      .all(parsed.match, limit, (page - 1) * limit) as unknown as Hit[];
+    return run();
   } catch (err) {
     throw new QueryError(`Search failed: ${(err as Error).message}`);
   }
+}
 
+export async function search(db: DatabaseSync, params: SearchParams, semantic?: Semantic) {
+  if (!semantic || params.mode === "keyword") return bm25Search(db, params);
+  try {
+    return await hybridSearch(db, params, semantic);
+  } catch (err) {
+    if (err instanceof QueryError) throw err;
+    console.error(`semantic search failed, falling back to keyword search: ${(err as Error).message}`);
+    return bm25Search(db, params);
+  }
+}
+
+function bm25Search(db: DatabaseSync, params: SearchParams) {
+  const started = performance.now();
+  const { parsed, limit, page } = parse(params);
+  const total = fts(() => Number(db.prepare(`SELECT count(*) AS n ${FTS_FROM}`).get(parsed.match)!.n));
+  const hits = fts(
+    () =>
+      db
+        .prepare(
+          `SELECT ${HIT_COLUMNS}, bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT}) AS score
+           ${FTS_FROM}
+           ORDER BY score
+           LIMIT ? OFFSET ?`,
+        )
+        .all(parsed.match, limit, (page - 1) * limit) as unknown as Hit[],
+  );
+  return {
+    mode: "keyword",
+    query: parsed.match,
+    total,
+    page,
+    limit,
+    took_ms: Math.round(performance.now() - started),
+    results: hydrate(db, hits, parsed),
+  };
+}
+
+// BM25 and semantic search, RRF_DEPTH sections each, fused with RRF: every
+// section scores the sum of 1 / (RRF_K + rank) over the rankings it's in.
+async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Semantic) {
+  const started = performance.now();
+  const { parsed, limit, page } = parse(params);
+  const bm25Ids = fts(
+    () =>
+      db
+        .prepare(
+          `SELECT s.id ${FTS_FROM}
+           ORDER BY bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT})
+           LIMIT ?`,
+        )
+        .all(parsed.match, RRF_DEPTH)
+        .map((r) => Number(r.id)),
+  );
+  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.key);
+  const byKeyword = new Set(bm25Ids);
+  const bySemantic = new Set(semanticIds);
+
+  const scores = new Map<number, number>();
+  for (const ranking of [bm25Ids, semanticIds]) {
+    ranking.forEach((id, i) => scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + i + 1)));
+  }
+  const fused = [...scores.keys()].sort((a, b) => scores.get(b)! - scores.get(a)!);
+  const pageIds = fused.slice((page - 1) * limit, page * limit);
+
+  const rows = pageIds.length
+    ? (db
+        .prepare(
+          `SELECT ${HIT_COLUMNS}, 0 AS score FROM sections s JOIN episodes e ON e.id = s.episode_id
+           WHERE s.id IN (${placeholders(pageIds.length)})`,
+        )
+        .all(...pageIds) as unknown as Hit[])
+    : [];
+  const byId = new Map(rows.map((h) => [h.id, h]));
+  const hits = pageIds.map((id) => ({ ...byId.get(id)!, score: scores.get(id)! }));
+
+  return {
+    mode: "hybrid",
+    query: parsed.match,
+    total: fused.length,
+    page,
+    limit,
+    took_ms: Math.round(performance.now() - started),
+    results: hydrate(db, hits, parsed).map((r) => ({
+      ...r,
+      // which rankings found the section: "keyword" (BM25), "semantic" or both
+      matched_by: [
+        ...(byKeyword.has(r.section.id) ? ["keyword"] : []),
+        ...(bySemantic.has(r.section.id) ? ["semantic"] : []),
+      ],
+    })),
+  };
+}
+
+// Snippets, moments and links for one page of hits. Sections that don't
+// contain every query word (found by semantic search only) have no FTS
+// snippet; they show the start of the section instead.
+function hydrate(db: DatabaseSync, hits: Hit[], parsed: ParsedQuery) {
   const ids = hits.map((h) => h.id);
   const snippets = new Map<number, string>();
   const segments = new Map<number, Segment[]>();
@@ -167,36 +269,31 @@ export function search(db: DatabaseSync, params: SearchParams) {
     }
   }
 
-  const results = hits.map((h) => ({
-    section: {
-      id: h.id,
-      idx: h.idx,
-      title: h.title,
-      title_html: highlight(h.title ?? "", parsed.terms),
-      start: h.start_time,
-      end: h.end_time,
-      link: link(h.url, h.start_time),
-    },
-    episode: {
-      id: h.episode_id,
-      title: h.episode_title,
-      title_html: highlight(h.episode_title ?? "", parsed.terms),
-      show: h.show,
-      date: h.date,
-      url: h.url,
-      duration: h.duration,
-    },
-    score: h.score,
-    snippet: snippets.get(h.id) ?? "",
-    moments: findMoments(segments.get(h.id) ?? [], parsed.terms, h.url),
-  }));
-
-  return {
-    query: parsed.match,
-    total,
-    page,
-    limit,
-    took_ms: Math.round(performance.now() - started),
-    results,
-  };
+  return hits.map((h) => {
+    const segs = segments.get(h.id) ?? [];
+    const opening = segs.map((seg) => seg.text).join(" ").slice(0, FALLBACK_SNIPPET_CHARS);
+    return {
+      section: {
+        id: h.id,
+        idx: h.idx,
+        title: h.title,
+        title_html: highlight(h.title ?? "", parsed.terms),
+        start: h.start_time,
+        end: h.end_time,
+        link: link(h.url, h.start_time),
+      },
+      episode: {
+        id: h.episode_id,
+        title: h.episode_title,
+        title_html: highlight(h.episode_title ?? "", parsed.terms),
+        show: h.show,
+        date: h.date,
+        url: h.url,
+        duration: h.duration,
+      },
+      score: h.score,
+      snippet: snippets.get(h.id) ?? (opening ? `${escapeHtml(opening)}…` : ""),
+      moments: findMoments(segs, parsed.terms, h.url),
+    };
+  });
 }

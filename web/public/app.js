@@ -1,6 +1,7 @@
 const $ = (sel) => document.querySelector(sel);
 const form = $("#search");
 const input = $("#q");
+const keywordOnly = $("#keyword");
 const status = $("#status");
 const results = $("#results");
 const pager = $("#pager");
@@ -9,6 +10,7 @@ const episodeTpl = $("#episode-tpl");
 
 const arabicNumber = new Intl.NumberFormat("ar");
 let current = null; // params of the search on screen
+const BADGES = { keyword: "Keyword", semantic: "Semantic" };
 
 function clock(seconds) {
   const s = Math.floor(seconds);
@@ -32,12 +34,13 @@ function timeLink(seconds, href) {
 
 function fromUrl() {
   const url = new URLSearchParams(location.search);
-  return { q: url.get("q") ?? "", page: Number(url.get("page")) || 1 };
+  return { q: url.get("q") ?? "", page: Number(url.get("page")) || 1, mode: url.get("mode") ?? "hybrid" };
 }
 
 function toQueryString(p) {
   const url = new URLSearchParams({ q: p.q });
   if (p.page > 1) url.set("page", p.page);
+  if (p.mode === "keyword") url.set("mode", "keyword");
   return url.toString();
 }
 
@@ -100,6 +103,14 @@ function renderEpisode({ episode, hits }) {
   node.querySelector(".date").textContent = episode.date;
   node.querySelector(".date").dateTime = episode.date;
   if (episode.duration) node.querySelector(".duration").textContent = clock(episode.duration);
+  // Hybrid results say which search found them; label the episode with every
+  // search that found one of its sections on this page.
+  const via = new Set(hits.flatMap((h) => h.matched_by ?? []));
+  node.querySelector(".via").append(
+    ...["keyword", "semantic"]
+      .filter((m) => via.has(m))
+      .map((m) => el("span", { className: `badge ${m}`, textContent: BADGES[m] })),
+  );
 
   const sections = node.querySelector(".sections");
   sections.append(...hits.map(renderSection));
@@ -134,7 +145,11 @@ function renderSection(hit) {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  run({ q: input.value.trim(), page: 1 });
+  run({ q: input.value.trim(), page: 1, mode: keywordOnly.checked ? "keyword" : "hybrid" });
+});
+
+keywordOnly.addEventListener("change", () => {
+  if (input.value.trim()) form.requestSubmit();
 });
 
 $("#prev").addEventListener("click", () => {
@@ -149,9 +164,11 @@ $("#next").addEventListener("click", () => {
 addEventListener("popstate", () => {
   const p = fromUrl();
   input.value = p.q;
+  keywordOnly.checked = p.mode === "keyword";
   run(p, { push: false });
 });
 
 const initial = fromUrl();
 input.value = initial.q;
+keywordOnly.checked = initial.mode === "keyword";
 if (initial.q) run(initial, { push: false });
