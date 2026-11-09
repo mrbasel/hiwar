@@ -144,6 +144,24 @@ group = "Yehia Tech"
 notes = "The channel is mostly courses/tutorials, so only the podcast playlist is downloaded."
 folder = "Yehia Tech"
 
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLp8t9oGfE4VAIWLoDA8hIAA3DtOhnuaoK"
+name = "برنامج الليوان - رمضان 2025"
+group = "روتانا خليجية"
+notes = "@khalejiatv is a TV channel, so only this playlist is downloaded."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLf-S1SGOq15ao4pclR5bG2LCAJKgvaZFe"
+name = "بودكاست سكينة"
+group = "قناة د خالد بن حمد الجابر"
+notes = "Only the podcast playlist of @Drkhalidaljaber."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PL5isa5XjlZ5pH8vT0TJO9qZrRiZcrWuDp"
+name = "Podcast البودكاست"
+group = "دروس أونلاين"
+notes = "Only the podcast playlist of @DroosOnline4u."
+
 # --- Channels ---
 
 [[source]]
@@ -535,33 +553,21 @@ url = "https://www.youtube.com/@RudhaChannel"
 name = "Rudha ردهة"
 
 [[source]]
-url = "https://www.youtube.com/@khalejiatv"
-name = "روتانا خليجية"
-
-[[source]]
-url = "https://www.youtube.com/@DroosOnline4u"
-name = "دروس أونلاين"
-
-[[source]]
 url = "https://www.youtube.com/@daqaeqnet"
 name = "Daqaeq net - دقائق"
+enabled = false
 
 [[source]]
 url = "https://www.youtube.com/@Mujtamaorg"
 name = "مجتمع Mujtama"
-
-[[source]]
-url = "https://www.youtube.com/@Ne3rafChannel"
-name = "Ne3raf | نعرف"
-
-[[source]]
-url = "https://www.youtube.com/@Drkhalidaljaber"
-name = "قناة د خالد بن حمد الجابر"
+enabled = false
 
 [[source]]
 url = "https://www.youtube.com/@Buckrahkw"
 name = "بكره"
+enabled = false
 
 [[source]]
 url = "https://www.youtube.com/@Almalazksa"
 name = "AlMalaz  ||  الملز"
+enabled = false
