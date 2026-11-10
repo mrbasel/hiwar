@@ -8,6 +8,12 @@ import path from "node:path";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
 const TIMEOUT_MS = 5000;
+const CACHED_QUERIES = 1000;
+
+// Query vectors already fetched, so paging through results reuses the same
+// vector (and the same ranking) instead of asking OpenRouter again. Oldest
+// entries are dropped first.
+const queryCache = new Map<string, Float32Array>();
 
 interface Doc {
   kind: "episode" | "chapter";
@@ -51,6 +57,8 @@ export function loadIndex(dir: string): Index {
 }
 
 async function embedQuery(model: string, query: string, key: string): Promise<Float32Array> {
+  const cached = queryCache.get(`${model}\0${query}`);
+  if (cached) return cached;
   const res = await fetch(API, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -62,7 +70,10 @@ async function embedQuery(model: string, query: string, key: string): Promise<Fl
   const vector = Float32Array.from(body.data?.[0]?.embedding ?? []);
   if (!vector.length) throw new Error(`no embedding in reply: ${JSON.stringify(body).slice(0, 200)}`);
   const norm = Math.hypot(...vector);
-  return vector.map((x) => x / norm);
+  const unit = vector.map((x) => x / norm);
+  queryCache.set(`${model}\0${query}`, unit);
+  if (queryCache.size > CACHED_QUERIES) queryCache.delete(queryCache.keys().next().value!);
+  return unit;
 }
 
 // Section ids, best first: a chapter hit becomes the section overlapping it
