@@ -1,17 +1,15 @@
-// Search over sections: full-text (FTS5 + BM25), or hybrid with semantic
-// search fused by reciprocal rank fusion. The matching moments inside each
-// section are found from its timestamped segments.
+// Section search: BM25, or hybrid BM25 + semantic fused with RRF.
 
 import { DatabaseSync } from "node:sqlite";
 import { words } from "./normalize.js";
 import { parseQuery, type ParsedQuery } from "./query.js";
 import { semanticSearch, type Embedder, type Index } from "./semantic.js";
 
-// BM25 column weights: heading (episode + section title), transcript text.
+// BM25 weights: heading, transcript.
 const HEADING_WEIGHT = 3;
 const TEXT_WEIGHT = 1;
 const MOMENTS_PER_RESULT = 3;
-// Same as eval/methods.py, so the eval scores what the site serves.
+// Same as eval/methods.py.
 const RRF_K = 60;
 const RRF_DEPTH = 50;
 const FALLBACK_SNIPPET_CHARS = 300;
@@ -21,7 +19,7 @@ export interface SearchParams {
   q: string;
   page?: number;
   limit?: number; // episodes per page
-  mode?: "hybrid" | "keyword"; // keyword: full-text search only
+  mode?: "hybrid" | "keyword";
 }
 
 export interface Semantic {
@@ -67,7 +65,7 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-// HTML-escaped text with words matching any term wrapped in <mark>.
+// Escaped HTML with matching words in <mark>.
 export function highlight(text: string, terms: string[]): string {
   const set = new Set(terms);
   return text
@@ -84,8 +82,7 @@ function link(url: string, seconds: number): string {
   return `${url}&t=${Math.floor(seconds)}s`;
 }
 
-// Segments that contain the most distinct query terms, in time order, with
-// the utterances around them as context.
+// Segments with the most query terms, in time order, with context.
 function findMoments(segments: Segment[], terms: string[], url: string) {
   const scored = segments
     .map((seg, i) => {
@@ -154,8 +151,7 @@ export async function search(db: DatabaseSync, params: SearchParams, semantic?: 
   }
 }
 
-// Hits grouped by episode, episodes in order of their best hit, keeping at
-// most SECTIONS_PER_EPISODE hits of each. `hits` must be sorted best first.
+// Groups sorted hits by episode, at most SECTIONS_PER_EPISODE each.
 function groupByEpisode(hits: Hit[]): Hit[][] {
   const groups = new Map<string, Hit[]>();
   for (const h of hits) {
@@ -166,8 +162,7 @@ function groupByEpisode(hits: Hit[]): Hit[][] {
   return [...groups.values()];
 }
 
-// Pages are pages of episodes (`limit` episodes each), so an episode shows up
-// on one page with all its matching sections, not split across pages.
+// Pages by episode, so an episode's sections stay on one page.
 function bm25Search(db: DatabaseSync, params: SearchParams) {
   const started = performance.now();
   const { parsed, limit, page } = parse(params);
@@ -178,8 +173,7 @@ function bm25Search(db: DatabaseSync, params: SearchParams) {
   const episodeIds = fts(() =>
     db
       .prepare(
-        // MATERIALIZED stops SQLite from merging the two queries: bm25() can't
-        // run inside an aggregate.
+        // MATERIALIZED: bm25() can't run inside an aggregate.
         `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${score} AS score ${FTS_FROM})
          SELECT episode_id FROM matches
          GROUP BY episode_id ORDER BY min(score), episode_id
@@ -211,9 +205,7 @@ function bm25Search(db: DatabaseSync, params: SearchParams) {
   };
 }
 
-// BM25 and semantic search, RRF_DEPTH sections each, fused with RRF: every
-// section scores the sum of 1 / (RRF_K + rank) over the rankings it's in.
-// Paged by episode, like bm25Search.
+// BM25 + semantic, fused with RRF: score = sum of 1 / (RRF_K + rank).
 async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Semantic) {
   const started = performance.now();
   const { parsed, limit, page } = parse(params);
@@ -259,7 +251,7 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
     took_ms: Math.round(performance.now() - started),
     results: hydrate(db, hits, parsed).map((r) => ({
       ...r,
-      // which rankings found the section: "keyword" (BM25), "semantic" or both
+      // which rankings found the section
       matched_by: [
         ...(byKeyword.has(r.section.id) ? ["keyword"] : []),
         ...(bySemantic.has(r.section.id) ? ["semantic"] : []),
@@ -268,16 +260,14 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
   };
 }
 
-// Snippets, moments and links for one page of hits. Sections that don't
-// contain every query word (found by semantic search only) have no FTS
-// snippet; they show the start of the section instead.
+// Snippets, moments and links for a page. Semantic-only hits show the
+// section start instead of a snippet.
 function hydrate(db: DatabaseSync, hits: Hit[], parsed: ParsedQuery) {
   const ids = hits.map((h) => h.id);
   const snippets = new Map<number, string>();
   const segments = new Map<number, Segment[]>();
   if (ids.length) {
-    // Snippets only for this page; computing them in the ranked query would
-    // run snippet() over every match before the LIMIT.
+    // Only this page, so snippet() doesn't run on every match.
     const rows = db
       .prepare(
         `SELECT rowid AS id, snippet(sections_fts, 1, char(2), char(3), '…', 24) AS snippet
