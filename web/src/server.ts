@@ -2,7 +2,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { openDb, QueryError, search, type SearchParams, type Semantic } from "./search.js";
-import { loadIndex } from "./semantic.js";
+import { loadIndex, localEmbedder, openRouterEmbedder } from "./semantic.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const ENV_FILE = path.join(ROOT, ".env");
@@ -10,25 +10,38 @@ if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 const DB_PATH = process.env.DB_PATH ?? path.join(ROOT, "podcasts.db");
 const EMBEDDINGS_DIR = process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3");
+// Local model, downloaded on first start (~2.3 GB).
+const MODELS_DIR = process.env.MODELS_DIR ?? path.join(ROOT, "models");
+// "local" or "openrouter".
+const QUERY_EMBEDDER = process.env.QUERY_EMBEDDER ?? "local";
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
 const db = openDb(DB_PATH);
 
-// Hybrid search needs the embeddings and an OpenRouter key; without either,
-// search is BM25 only.
 let semantic: Semantic | undefined;
-if (!process.env.OPENROUTER_KEY) {
+if (QUERY_EMBEDDER === "openrouter" && !process.env.OPENROUTER_KEY) {
   console.warn("OPENROUTER_KEY not set: BM25 search only");
 } else if (!fs.existsSync(path.join(EMBEDDINGS_DIR, "vectors.npy"))) {
   console.warn(`no embeddings in ${EMBEDDINGS_DIR}: BM25 search only`);
 } else {
-  const started = performance.now();
-  semantic = { index: loadIndex(EMBEDDINGS_DIR), key: process.env.OPENROUTER_KEY };
+  let started = performance.now();
+  const index = loadIndex(EMBEDDINGS_DIR);
   console.log(
-    `loaded ${semantic.index.docs.length} embeddings (${semantic.index.model}) ` +
-      `in ${Math.round(performance.now() - started)} ms`,
+    `loaded ${index.docs.length} embeddings (${index.model}) in ${Math.round(performance.now() - started)} ms`,
   );
+  if (QUERY_EMBEDDER === "openrouter") {
+    semantic = { index, embed: openRouterEmbedder(index.model, process.env.OPENROUTER_KEY!) };
+  } else {
+    started = performance.now();
+    console.log(`loading ${index.model} for queries from ${MODELS_DIR} (downloaded on first start)`);
+    try {
+      semantic = { index, embed: await localEmbedder(index.model, MODELS_DIR) };
+      console.log(`loaded the query model in ${Math.round(performance.now() - started)} ms`);
+    } catch (err) {
+      console.warn(`could not load the query model: ${(err as Error).message}: BM25 search only`);
+    }
+  }
 }
 const app = express();
 
@@ -51,7 +64,6 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
-// The episode map for /map.html, written by `search.map` (Python).
 app.get("/api/map", (_req, res) => {
   const file = path.join(EMBEDDINGS_DIR, "map.json");
   if (fs.existsSync(file)) res.sendFile(file);
@@ -60,6 +72,7 @@ app.get("/api/map", (_req, res) => {
 
 app.use(express.static(path.resolve(import.meta.dirname, "../public")));
 
-app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, (err?: Error) => {
+  if (err) throw err;
   console.log(`Search at http://${HOST}:${PORT} (db: ${DB_PATH})`);
 });

@@ -5,7 +5,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { words } from "./normalize.js";
 import { parseQuery, type ParsedQuery } from "./query.js";
-import { semanticSearch, type Index } from "./semantic.js";
+import { semanticSearch, type Embedder, type Index } from "./semantic.js";
 
 // BM25 column weights: heading (episode + section title), transcript text.
 const HEADING_WEIGHT = 3;
@@ -26,7 +26,7 @@ export interface SearchParams {
 
 export interface Semantic {
   index: Index;
-  key: string;
+  embed: Embedder;
 }
 
 interface Hit {
@@ -228,7 +228,7 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
         .all(parsed.match, RRF_DEPTH)
         .map((r) => Number(r.id)),
   );
-  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.key);
+  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.embed);
   const byKeyword = new Set(bm25Ids);
   const bySemantic = new Set(semanticIds);
 

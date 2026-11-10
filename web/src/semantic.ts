@@ -1,18 +1,22 @@
 // Semantic search over the episode and chapter embeddings written by
 // `search.embed` (Python), mirroring search/semantic.py: brute force over
 // every vector, each hit mapped to a section of the current database.
+// Queries are embedded locally or through OpenRouter.
 
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { env, pipeline } from "@huggingface/transformers";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
 const TIMEOUT_MS = 5000;
 const CACHED_QUERIES = 1000;
+// ONNX versions of the indexed models; fp32 matches OpenRouter's vectors.
+const LOCAL_MODELS: Record<string, string> = { "baai/bge-m3": "Xenova/bge-m3" };
 
-// Query vectors already fetched, so paging through results reuses the same
-// vector (and the same ranking) instead of asking OpenRouter again. Oldest
-// entries are dropped first.
+export type Embedder = (query: string) => Promise<Float32Array>;
+
+// Recent query vectors, so paging keeps the same ranking. Oldest dropped first.
 const queryCache = new Map<string, Float32Array>();
 
 interface Doc {
@@ -56,24 +60,41 @@ export function loadIndex(dir: string): Index {
   return { model: meta.model, dims: shape[1], vectors: data, docs };
 }
 
-async function embedQuery(model: string, query: string, key: string): Promise<Float32Array> {
-  const cached = queryCache.get(`${model}\0${query}`);
+export async function localEmbedder(model: string, cacheDir: string): Promise<Embedder> {
+  const onnx = LOCAL_MODELS[model];
+  if (!onnx) throw new Error(`no local version of ${model}`);
+  env.cacheDir = cacheDir;
+  const extract = await pipeline("feature-extraction", onnx, { dtype: "fp32" });
+  return async (query) => {
+    const out = await extract(query, { pooling: "cls", normalize: true });
+    return out.data as Float32Array;
+  };
+}
+
+export function openRouterEmbedder(model: string, key: string): Embedder {
+  return async (query) => {
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, input: [query] }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const body = await res.json();
+    const vector = Float32Array.from(body.data?.[0]?.embedding ?? []);
+    if (!vector.length) throw new Error(`no embedding in reply: ${JSON.stringify(body).slice(0, 200)}`);
+    const norm = Math.hypot(...vector);
+    return vector.map((x) => x / norm);
+  };
+}
+
+async function embedQuery(embed: Embedder, query: string): Promise<Float32Array> {
+  const cached = queryCache.get(query);
   if (cached) return cached;
-  const res = await fetch(API, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, input: [query] }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const body = await res.json();
-  const vector = Float32Array.from(body.data?.[0]?.embedding ?? []);
-  if (!vector.length) throw new Error(`no embedding in reply: ${JSON.stringify(body).slice(0, 200)}`);
-  const norm = Math.hypot(...vector);
-  const unit = vector.map((x) => x / norm);
-  queryCache.set(`${model}\0${query}`, unit);
+  const vector = await embed(query);
+  queryCache.set(query, vector);
   if (queryCache.size > CACHED_QUERIES) queryCache.delete(queryCache.keys().next().value!);
-  return unit;
+  return vector;
 }
 
 // Section ids, best first: a chapter hit becomes the section overlapping it
@@ -83,9 +104,9 @@ export async function semanticSearch(
   index: Index,
   query: string,
   k: number,
-  key: string,
+  embed: Embedder,
 ): Promise<number[]> {
-  const q = await embedQuery(index.model, query, key);
+  const q = await embedQuery(embed, query);
   const { vectors, dims, docs } = index;
   const scores = new Float32Array(docs.length);
   for (let i = 0; i < docs.length; i++) {
