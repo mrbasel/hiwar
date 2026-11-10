@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>خريطة الحلقات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="map.css">
+</head>
+<body class="map-page">
+  <aside class="panel">
+    <header>
+      <h1>خريطة الحلقات</h1>
+      <a href="/">البحث ←</a>
+    </header>
+    <p class="hint">كل نقطة حلقة، والحلقات المتشابهة في المعنى تتجاور. اسحب للتحريك، ومرّر للتكبير.</p>
+
+    <input id="filter" type="search" placeholder="ظلّل الحلقات حسب العنوان…" autocomplete="off" aria-label="Filter by title">
+    <p id="count" class="count"></p>
+
+    <div class="colour" role="radiogroup" aria-label="Colour by">
+      <label><input type="radio" name="colour" value="cluster" checked> لوّن حسب المجموعة</label>
+      <label><input type="radio" name="colour" value="channel"> حسب القناة</label>
+    </div>
+
+    <section id="selected" class="selected" hidden>
+      <h2><a id="sel-title" target="_blank" rel="noopener"></a></h2>
+      <p id="sel-meta" class="meta"></p>
+      <p id="sel-cluster" class="meta"></p>
+      <h3>الأقرب على الخريطة</h3>
+      <ol id="neighbours"></ol>
+    </section>
+
+    <h3 class="list-head">المجموعات</h3>
+    <ol id="clusters" class="clusters"></ol>
+  </aside>
+
+  <div class="stage">
+    <canvas id="map"></canvas>
+    <div id="tip" class="tip" hidden></div>
+    <p id="status" class="map-status">جارٍ تحميل الخريطة…</p>
+  </div>
+
+  <script type="module" src="map.js"></script>
+</body>
+</html>

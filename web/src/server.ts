@@ -51,6 +51,13 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
+// The episode map for /map.html, written by `search.map` (Python).
+app.get("/api/map", (_req, res) => {
+  const file = path.join(EMBEDDINGS_DIR, "map.json");
+  if (fs.existsSync(file)) res.sendFile(file);
+  else res.status(404).json({ error: "no map yet: run `uv run python -m search.map`" });
+});
+
 app.use(express.static(path.resolve(import.meta.dirname, "../public")));
 
 app.listen(PORT, HOST, () => {
