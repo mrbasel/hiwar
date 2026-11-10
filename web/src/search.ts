@@ -39,6 +39,7 @@ interface Hit {
   date: string;
   url: string;
   duration: number | null;
+  description: string | null;
   score: number;
 }
 
@@ -116,7 +117,8 @@ function placeholders(n: number): string {
 }
 
 const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
-  e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration`;
+  e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration,
+  e.description`;
 
 const FTS_FROM = `
     FROM sections_fts
@@ -313,6 +315,8 @@ function hydrate(db: DatabaseSync, hits: Hit[], parsed: ParsedQuery) {
         date: h.date,
         url: h.url,
         duration: h.duration,
+        // one line break between paragraphs keeps long descriptions compact
+        description_html: highlight((h.description ?? "").replace(/\s*\n\s*/g, "\n").trim(), parsed.terms),
       },
       score: h.score,
       snippet: snippets.get(h.id) ?? (opening ? `${escapeHtml(opening)}…` : ""),

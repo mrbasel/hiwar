@@ -103,6 +103,19 @@ function renderEpisode({ episode, hits }) {
   node.querySelector(".date").textContent = episode.date;
   node.querySelector(".date").dateTime = episode.date;
   if (episode.duration) node.querySelector(".duration").textContent = clock(episode.duration);
+  const desc = node.querySelector(".ep-desc");
+  const descToggle = node.querySelector(".desc-toggle");
+  if (episode.description_html) {
+    desc.innerHTML = episode.description_html;
+    descToggle.textContent = "اعرض الوصف";
+    descToggle.addEventListener("click", () => {
+      desc.hidden = !desc.hidden;
+      descToggle.textContent = desc.hidden ? "اعرض الوصف" : "أخفِ الوصف";
+      descToggle.setAttribute("aria-expanded", String(!desc.hidden));
+    });
+  } else {
+    descToggle.remove();
+  }
   // Hybrid results say which search found them; label the episode with every
   // search that found one of its sections on this page.
   const via = new Set(hits.flatMap((h) => h.matched_by ?? []));
@@ -114,7 +127,7 @@ function renderEpisode({ episode, hits }) {
 
   const sections = node.querySelector(".sections");
   sections.append(...hits.map(renderSection));
-  const toggle = node.querySelector(".toggle");
+  const toggle = node.querySelector(".toggle:not(.desc-toggle)");
   const showLabel = `اعرض الأجزاء المطابقة (${arabicNumber.format(hits.length)})`;
   toggle.textContent = showLabel;
   toggle.addEventListener("click", () => {

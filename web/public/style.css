@@ -152,6 +152,21 @@ main {
   color: var(--muted);
 }
 
+.ep-desc {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+
 .via {
   display: inline-flex;
   gap: 0.3rem;
