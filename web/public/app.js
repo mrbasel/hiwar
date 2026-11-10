@@ -76,7 +76,7 @@ async function run(p, { push = true } = {}) {
 function render(data) {
   const { total, page, limit, took_ms } = data;
   status.textContent = total
-    ? `${arabicNumber.format(total)} جزءًا مطابقًا (${took_ms} ms)`
+    ? `${arabicNumber.format(total)} حلقة مطابقة (${took_ms} ms)`
     : "لا توجد نتائج. جرّب كلمات أقل، أو تهجئة أخرى للاسم، أو استخدم * للبحث ببداية الكلمة.";
 
   // Group this page's sections by episode, keeping the order of the best hit.

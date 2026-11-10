@@ -15,11 +15,12 @@ const MOMENTS_PER_RESULT = 3;
 const RRF_K = 60;
 const RRF_DEPTH = 50;
 const FALLBACK_SNIPPET_CHARS = 300;
+const SECTIONS_PER_EPISODE = 10;
 
 export interface SearchParams {
   q: string;
   page?: number;
-  limit?: number;
+  limit?: number; // episodes per page
   mode?: "hybrid" | "keyword"; // keyword: full-text search only
 }
 
@@ -153,21 +154,52 @@ export async function search(db: DatabaseSync, params: SearchParams, semantic?: 
   }
 }
 
+// Hits grouped by episode, episodes in order of their best hit, keeping at
+// most SECTIONS_PER_EPISODE hits of each. `hits` must be sorted best first.
+function groupByEpisode(hits: Hit[]): Hit[][] {
+  const groups = new Map<string, Hit[]>();
+  for (const h of hits) {
+    if (!groups.has(h.episode_id)) groups.set(h.episode_id, []);
+    const group = groups.get(h.episode_id)!;
+    if (group.length < SECTIONS_PER_EPISODE) group.push(h);
+  }
+  return [...groups.values()];
+}
+
+// Pages are pages of episodes (`limit` episodes each), so an episode shows up
+// on one page with all its matching sections, not split across pages.
 function bm25Search(db: DatabaseSync, params: SearchParams) {
   const started = performance.now();
   const { parsed, limit, page } = parse(params);
-  const total = fts(() => Number(db.prepare(`SELECT count(*) AS n ${FTS_FROM}`).get(parsed.match)!.n));
-  const hits = fts(
-    () =>
-      db
-        .prepare(
-          `SELECT ${HIT_COLUMNS}, bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT}) AS score
-           ${FTS_FROM}
-           ORDER BY score
-           LIMIT ? OFFSET ?`,
-        )
-        .all(parsed.match, limit, (page - 1) * limit) as unknown as Hit[],
+  const score = `bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT})`;
+  const total = fts(() =>
+    Number(db.prepare(`SELECT count(DISTINCT s.episode_id) AS n ${FTS_FROM}`).get(parsed.match)!.n),
   );
+  const episodeIds = fts(() =>
+    db
+      .prepare(
+        // MATERIALIZED stops SQLite from merging the two queries: bm25() can't
+        // run inside an aggregate.
+        `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${score} AS score ${FTS_FROM})
+         SELECT episode_id FROM matches
+         GROUP BY episode_id ORDER BY min(score), episode_id
+         LIMIT ? OFFSET ?`,
+      )
+      .all(parsed.match, limit, (page - 1) * limit)
+      .map((r) => String(r.episode_id)),
+  );
+  const hits = episodeIds.length
+    ? fts(
+        () =>
+          db
+            .prepare(
+              `SELECT ${HIT_COLUMNS}, ${score} AS score ${FTS_FROM}
+               AND s.episode_id IN (${placeholders(episodeIds.length)})
+               ORDER BY score`,
+            )
+            .all(parsed.match, ...episodeIds) as unknown as Hit[],
+      )
+    : [];
   return {
     mode: "keyword",
     query: parsed.match,
@@ -175,12 +207,13 @@ function bm25Search(db: DatabaseSync, params: SearchParams) {
     page,
     limit,
     took_ms: Math.round(performance.now() - started),
-    results: hydrate(db, hits, parsed),
+    results: hydrate(db, groupByEpisode(hits).flat(), parsed),
   };
 }
 
 // BM25 and semantic search, RRF_DEPTH sections each, fused with RRF: every
 // section scores the sum of 1 / (RRF_K + rank) over the rankings it's in.
+// Paged by episode, like bm25Search.
 async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Semantic) {
   const started = performance.now();
   const { parsed, limit, page } = parse(params);
@@ -204,23 +237,23 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
     ranking.forEach((id, i) => scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + i + 1)));
   }
   const fused = [...scores.keys()].sort((a, b) => scores.get(b)! - scores.get(a)!);
-  const pageIds = fused.slice((page - 1) * limit, page * limit);
 
-  const rows = pageIds.length
+  const rows = fused.length
     ? (db
         .prepare(
           `SELECT ${HIT_COLUMNS}, 0 AS score FROM sections s JOIN episodes e ON e.id = s.episode_id
-           WHERE s.id IN (${placeholders(pageIds.length)})`,
+           WHERE s.id IN (${placeholders(fused.length)})`,
         )
-        .all(...pageIds) as unknown as Hit[])
+        .all(...fused) as unknown as Hit[])
     : [];
   const byId = new Map(rows.map((h) => [h.id, h]));
-  const hits = pageIds.map((id) => ({ ...byId.get(id)!, score: scores.get(id)! }));
+  const episodes = groupByEpisode(fused.map((id) => ({ ...byId.get(id)!, score: scores.get(id)! })));
+  const hits = episodes.slice((page - 1) * limit, page * limit).flat();
 
   return {
     mode: "hybrid",
     query: parsed.match,
-    total: fused.length,
+    total: episodes.length,
     page,
     limit,
     took_ms: Math.round(performance.now() - started),
