@@ -39,11 +39,15 @@
   .dot.g0 { background: var(--g0); } .dot.g1 { background: var(--g1); } .dot.g2 { background: var(--g2); }
   .dot.auto { background: none; border: 1px dashed var(--muted); color: var(--muted); line-height: 18px; }
   .dot.current { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .dot.new-episode:not(:first-child) { margin-left: 12px; }
   article { flex: 1; overflow-y: auto; padding: 16px 20px; }
   .meta { color: var(--muted); font-size: 13px; }
   article h2 { margin: 4px 0; font-size: 18px; font-weight: 600; }
   .section-title { margin: 24px 0 0; color: var(--muted); font-size: 13px; }
-  .text { white-space: pre-wrap; font: 18px/2 var(--read); max-width: 75ch; margin: 16px 0 0 auto; }
+  .text { font: 18px/2 var(--read); max-width: 75ch; margin: 16px 0 0 auto; }
+  .text p { margin: 0; display: flex; gap: 12px; }
+  .text a { flex: none; font: 12px/36px var(--ui); color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+  .text a:hover { color: var(--signal); text-decoration: underline; }
   footer { padding: 10px 20px; border-top: 1px solid var(--rule); display: flex; gap: 12px; align-items: center; }
   footer button { font: inherit; padding: 6px 14px; cursor: pointer; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
   footer button.on { border-color: var(--signal); background: var(--active); }
@@ -102,15 +106,17 @@ async function openQuery(id) {
 
 function render() {
   $("dots").innerHTML = items.map((it, i) =>
-    `<span class="dot ${it.grade !== null ? "g" + it.grade : it.auto ? "auto" : ""} ${i === pos ? "current" : ""}" data-i="${i}">${it.grade ?? (it.auto ? "A" : "")}</span>`).join("");
+    `<span class="dot ${it.grade !== null ? "g" + it.grade : it.auto ? "auto" : ""} ${i === pos ? "current" : ""} ${it.result.episode_id !== items[i - 1]?.result.episode_id ? "new-episode" : ""}" data-i="${i}">${it.grade ?? (it.auto ? "A" : "")}</span>`).join("");
   const it = items[pos];
   document.querySelectorAll("footer button").forEach((b) => b.classList.toggle("on", it && Number(b.dataset.grade) === it.grade));
   if (!it) { $("item").innerHTML = "<p>No results to judge for this query.</p>"; return; }
+  const episode = items.filter((x) => x.result.episode_id === it.result.episode_id);
   $("item").innerHTML = `
-    <div class="meta">${pos + 1} / ${items.length} ·${it.grade === null && it.auto ? " <b>auto-graded</b> (grade it to override) ·" : ""} <bdi>${esc(it.show)}</bdi> · <bdi>${esc(it.date)}</bdi> ·
+    <div class="meta">${pos + 1} / ${items.length} ·${episode.length > 1 ? ` section ${episode.indexOf(it) + 1} of ${episode.length} from this episode ·` : ""}${it.grade === null && it.auto ? " <b>auto-graded</b> (grade it to override) ·" : ""} <bdi>${esc(it.show)}</bdi> · <bdi>${esc(it.date)}</bdi> ·
       <a href="${esc(it.link)}" target="_blank" dir="ltr">${time(it.result.start)} – ${time(it.result.end)} ↗</a></div>
     <h2 dir="auto">${esc(it.episode_title)}</h2>
-    <div class="text" dir="rtl">${esc(it.text)}</div>
+    <div class="text" dir="rtl">${it.lines.map((l) =>
+      `<p><a href="${esc(l.link)}" target="_blank" dir="ltr">${time(l.start)}</a><span>${esc(l.text)}</span></p>`).join("")}</div>
     <p class="section-title">Section title (often inherited from a longer chapter, so it may not match the text): <bdi>§${it.result.idx} ${esc(it.section_title)}</bdi></p>`;
   $("item").scrollTop = 0;
 }

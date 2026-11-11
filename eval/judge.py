@@ -4,8 +4,9 @@
 
 The pool for a query is the top N results of every run in eval/runs/, plus
 the best-ranked section of each of a run's top 10 episodes (so `eval.run
---episodes` has a grade for each), deduplicated and shuffled, so you can't
-tell which method or rank a result came from. Grades are appended to eval/judgments.jsonl as you press keys.
+--episodes` has a grade for each), deduplicated and shuffled by episode, so
+you can't tell which method or rank a result came from. An episode's sections
+stay together, in the order they're in the episode, so you read it once. Grades are appended to eval/judgments.jsonl as you press keys.
 
 Results with an accepted model grade (see eval.data) are marked "auto" and
 skipped when moving to the next result, so you only review the rest. The
@@ -39,9 +40,12 @@ def pool(runs, qid, depth):
             firsts.setdefault(r["episode_id"], r)
         for r in results[:depth] + list(firsts.values()):
             seen.setdefault((r["episode_id"], r["idx"]), r)
-    items = list(seen.values())
-    random.Random(qid).shuffle(items)
-    return items
+    episodes = {}
+    for r in seen.values():
+        episodes.setdefault(r["episode_id"], []).append(r)
+    groups = list(episodes.values())
+    random.Random(qid).shuffle(groups)
+    return [r for group in groups for r in sorted(group, key=lambda r: r["idx"])]
 
 
 def make_handler(conn, depth):
@@ -87,20 +91,25 @@ def make_handler(conn, depth):
             out = []
             for r in pool(load_runs(), qid, depth):
                 row = conn.execute(
-                    """SELECT e.title, e.show, e.date, e.url, s.title, s.text
+                    """SELECT e.title, e.show, e.date, e.url, s.id, s.title
                        FROM sections s JOIN episodes e ON e.id = s.episode_id
                        WHERE s.episode_id = ? AND s.idx = ?""",
                     (r["episode_id"], r["idx"]),
                 ).fetchone()
                 if row is None:  # run is from an older build
                     continue
-                episode_title, show, date, url, section_title, text = row
+                episode_title, show, date, url, section_id, section_title = row
+                lines = conn.execute(
+                    "SELECT start_time, text FROM segments WHERE section_id = ? ORDER BY idx", (section_id,),
+                ).fetchall()
                 out.append({
                     "result": {k: r[k] for k in ("episode_id", "idx", "start", "end")},
                     "grade": grade_of(judgments, qid, r),
                     "auto": grade_of(auto, qid, r) is not None,
                     "episode_title": episode_title, "show": show, "date": date,
-                    "section_title": section_title, "text": text,
+                    "section_title": section_title,
+                    "lines": [{"start": start, "text": text, "link": f"{url}&t={int(start)}s"}
+                              for start, text in lines],
                     "link": f"{url}&t={int(r['start'])}s",
                 })
             return out
