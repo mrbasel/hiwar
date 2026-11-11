@@ -2,9 +2,10 @@
 
     uv run python -m eval.judge [--db PATH] [--depth N] [--host HOST] [--port N]
 
-The pool for a query is the top N results of every run in eval/runs/,
-deduplicated and shuffled, so you can't tell which method or rank a result
-came from. Grades are appended to eval/judgments.jsonl as you press keys.
+The pool for a query is the top N results of every run in eval/runs/, plus
+the best-ranked section of each of a run's top 10 episodes (so `eval.run
+--episodes` has a grade for each), deduplicated and shuffled, so you can't
+tell which method or rank a result came from. Grades are appended to eval/judgments.jsonl as you press keys.
 
 Results with an accepted model grade (see eval.data) are marked "auto" and
 skipped when moving to the next result, so you only review the rest. The
@@ -24,10 +25,19 @@ from .data import add_judgment, grade_of, load_judgments, load_model_grades, loa
 PAGE = Path(__file__).parent / "judge.html"
 
 
+EPISODE_DEPTH = 10  # K in eval.run
+
+
 def pool(runs, qid, depth):
     seen = {}
     for run in runs.values():
-        for r in run.get(qid, {}).get("results", [])[:depth]:
+        results = run.get(qid, {}).get("results", [])
+        firsts = {}
+        for r in results:
+            if len(firsts) == EPISODE_DEPTH:
+                break
+            firsts.setdefault(r["episode_id"], r)
+        for r in results[:depth] + list(firsts.values()):
             seen.setdefault((r["episode_id"], r["idx"]), r)
     items = list(seen.values())
     random.Random(qid).shuffle(items)

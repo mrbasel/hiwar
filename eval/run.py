@@ -1,6 +1,6 @@
 """Score search methods against the graded results.
 
-    uv run python -m eval.run [METHOD ...] [--strict] [--queries]
+    uv run python -m eval.run [METHOD ...] [--strict] [--queries] [--episodes]
 
 Reads eval/runs/<method>.jsonl (from eval.retrieve) and every known grade
 (eval.data.load_grades) and prints, per method, overall and per query type:
@@ -19,6 +19,13 @@ unconf    share of the grades used that are Jev's alone (not yours, not
 
 Queries with no known relevant result are left out of the averages (and
 listed); a query where the method returns nothing scores 0.
+
+--episodes scores episodes instead of sections: each ranking is cut down to
+its distinct episodes, in order of their first section, and an episode's
+grade is the best grade of any of its graded sections for the query, whether
+or not this method returned that section. This asks "did it find the right
+episodes?", which is what the site pages by, rather than "did it land on the
+right part of them?".
 """
 
 import argparse
@@ -47,10 +54,33 @@ def dcg(grades):
     return sum(g / math.log2(i + 2) for i, g in enumerate(grades))
 
 
-def score_query(results, spans):
-    top = [lookup(spans, r) for r in results[:K]]
+SOURCE_RANK = {"jev": 0, "confirmed": 1, "you": 2}
+
+
+def episode_grades(spans):
+    """{episode_id: (grade, source)}, the best graded span of each episode.
+    Ties go to the more trusted source."""
+    best = {}
+    for (episode_id, _, _), (grade, source) in spans.items():
+        key = (grade, SOURCE_RANK[source])
+        if episode_id not in best or key > (best[episode_id][0], SOURCE_RANK[best[episode_id][1]]):
+            best[episode_id] = (grade, source)
+    return best
+
+
+def graded(results, spans, episodes=False):
+    """The top K results as (grade, source) or None, and every known grade for the query."""
+    if not episodes:
+        return [lookup(spans, r) for r in results[:K]], [g for g, _ in spans.values()]
+    best = episode_grades(spans)
+    ranked = list(dict.fromkeys(r["episode_id"] for r in results))[:K]
+    return [best.get(e) for e in ranked], [g for g, _ in best.values()]
+
+
+def score_query(results, spans, episodes=False):
+    top, known = graded(results, spans, episodes)
     grades = [v[0] if v else 0 for v in top]
-    known = sorted((g for g, _ in spans.values()), reverse=True)
+    known = sorted(known, reverse=True)
     relevant = sum(g > 0 for g in known)
     ideal = dcg(known[:K])
     first = next((i for i, g in enumerate(grades) if g > 0), None)
@@ -87,6 +117,7 @@ def main():
     parser.add_argument("methods", nargs="*", help="default: every run in eval/runs/")
     parser.add_argument("--strict", action="store_true", help="only your grades and confirmed model grades")
     parser.add_argument("--queries", action="store_true", help="also print a line per query")
+    parser.add_argument("--episodes", action="store_true", help="score episodes instead of sections")
     args = parser.parse_args()
 
     queries = load_queries()
@@ -100,13 +131,13 @@ def main():
         built = {line["built_at"] for line in run.values()}
         times = sorted(line["took_ms"] for line in run.values())
         p95 = times[min(len(times) - 1, math.ceil(0.95 * len(times)) - 1)]
-        print(f"\n== {name}  (build {', '.join(sorted(built))}; "
+        print(f"\n== {name}{' by episode' if args.episodes else ''}  (build {', '.join(sorted(built))}; "
               f"latency p50 {times[len(times) // 2]:.0f} ms, p95 {p95:.0f} ms)")
 
         scored, skipped = [], []
         by_type = defaultdict(list)
         for q in queries:
-            s = score_query(run[q["id"]]["results"], grades.get(q["id"], {}))
+            s = score_query(run[q["id"]]["results"], grades.get(q["id"], {}), args.episodes)
             if not s["relevant"]:
                 skipped.append(q)
                 continue
