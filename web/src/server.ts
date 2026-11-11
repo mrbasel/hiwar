@@ -55,6 +55,8 @@ app.get("/api/search", async (req, res) => {
     page: Number(req.query.page) || 1,
     limit: Number(req.query.limit) || 20,
     mode: req.query.mode === "keyword" ? "keyword" : "hybrid",
+    // ?shows=id1,id2: channel ids
+    shows: str(req.query.shows)?.split(",").map((s) => s.trim()).filter(Boolean),
   };
   try {
     res.json(await search(db, params, semantic));
@@ -62,6 +64,16 @@ app.get("/api/search", async (req, res) => {
     if (err instanceof QueryError) res.status(400).json({ error: err.message });
     else throw err;
   }
+});
+
+// Channels to filter by, biggest first.
+const listShows = db.prepare(
+  `SELECT c.id, trim(c.name) AS name, count(*) AS episodes
+   FROM episodes e JOIN channels c ON c.id = e.channel_id
+   GROUP BY c.id ORDER BY episodes DESC, name`,
+);
+app.get("/api/shows", (_req, res) => {
+  res.json(listShows.all());
 });
 
 app.get("/api/map", (_req, res) => {

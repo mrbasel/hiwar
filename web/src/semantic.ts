@@ -98,24 +98,28 @@ async function embedQuery(embed: Embedder, query: string): Promise<Float32Array>
 }
 
 // Section ids, best first: a chapter hit becomes the section overlapping it
-// most, an episode hit the episode's first section.
+// most, an episode hit the episode's first section. Given `episodes`, only
+// their docs are scored.
 export async function semanticSearch(
   db: DatabaseSync,
   index: Index,
   query: string,
   k: number,
   embed: Embedder,
+  episodes?: Set<string>,
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);
   const { vectors, dims, docs } = index;
+  let candidates = Uint32Array.from(docs.keys());
+  if (episodes) candidates = candidates.filter((i) => episodes.has(docs[i].episode_id));
   const scores = new Float32Array(docs.length);
-  for (let i = 0; i < docs.length; i++) {
+  for (const i of candidates) {
     let s = 0;
     const row = i * dims;
     for (let j = 0; j < dims; j++) s += vectors[row + j] * q[j];
     scores[i] = s;
   }
-  const order = Uint32Array.from(docs.keys()).sort((a, b) => scores[b] - scores[a]);
+  const order = candidates.sort((a, b) => scores[b] - scores[a]);
 
   const chapterSection = db.prepare(
     `SELECT id FROM sections

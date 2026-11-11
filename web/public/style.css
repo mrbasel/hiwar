@@ -78,11 +78,18 @@ mark {
   cursor: pointer;
 }
 
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.2rem;
+  margin-top: 0.5rem;
+}
+
 .option {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin-top: 0.5rem;
   font-size: 0.875rem;
   color: #c9d0da;
   cursor: pointer;
@@ -91,6 +98,89 @@ mark {
 .option input {
   accent-color: var(--signal);
   margin: 0;
+}
+
+/* Channel picker */
+
+.picker {
+  position: relative;
+  font-size: 0.875rem;
+}
+
+.picker summary {
+  cursor: pointer;
+  color: #c9d0da;
+  padding: 0.1rem 0.6rem;
+  border: 1px solid #4a5462;
+  border-radius: 999px;
+}
+
+.picker summary:hover,
+.picker.active summary { color: #fff; border-color: #fff; }
+
+.picker .panel {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(100% + 0.4rem);
+  width: min(22rem, calc(100vw - 2rem));
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+.panel-head {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.panel-head input {
+  flex: 1;
+  min-width: 0;
+  font: 0.9rem var(--ui);
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.panel-head button {
+  font: 500 0.8rem var(--ui);
+  color: var(--signal);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 0.6rem;
+  cursor: pointer;
+}
+
+.picker ul {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.picker li label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+}
+
+.picker li label:hover { background: var(--paper); }
+
+.picker li input { accent-color: var(--signal); margin: 0; }
+
+.picker .count {
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Page body */

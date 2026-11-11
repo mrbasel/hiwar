@@ -20,6 +20,7 @@ export interface SearchParams {
   page?: number;
   limit?: number; // episodes per page
   mode?: "hybrid" | "keyword";
+  shows?: string[]; // channel ids to search in; every channel if empty
 }
 
 export interface Semantic {
@@ -120,18 +121,23 @@ const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
   e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration,
   e.description`;
 
-const FTS_FROM = `
+// Matching sections in the given channels. Bind the match, then the channel ids.
+function ftsFrom(shows: string[]): string {
+  const scope = shows.length ? ` AND e.channel_id IN (${placeholders(shows.length)})` : "";
+  return `
     FROM sections_fts
     JOIN sections s ON s.id = sections_fts.rowid
     JOIN episodes e ON e.id = s.episode_id
-    WHERE sections_fts MATCH ?`;
+    WHERE sections_fts MATCH ?${scope}`;
+}
 
 function parse(params: SearchParams) {
   const parsed = parseQuery(params.q);
   if (!parsed) throw new QueryError("Type at least one word to search for.");
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
   const page = Math.max(params.page ?? 1, 1);
-  return { parsed, limit, page };
+  const shows = [...new Set(params.shows ?? [])];
+  return { parsed, limit, page, shows, from: ftsFrom(shows) };
 }
 
 function fts<T>(run: () => T): T {
@@ -167,21 +173,21 @@ function groupByEpisode(hits: Hit[]): Hit[][] {
 // Pages by episode, so an episode's sections stay on one page.
 function bm25Search(db: DatabaseSync, params: SearchParams) {
   const started = performance.now();
-  const { parsed, limit, page } = parse(params);
+  const { parsed, limit, page, shows, from } = parse(params);
   const score = `bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT})`;
   const total = fts(() =>
-    Number(db.prepare(`SELECT count(DISTINCT s.episode_id) AS n ${FTS_FROM}`).get(parsed.match)!.n),
+    Number(db.prepare(`SELECT count(DISTINCT s.episode_id) AS n ${from}`).get(parsed.match, ...shows)!.n),
   );
   const episodeIds = fts(() =>
     db
       .prepare(
         // MATERIALIZED: bm25() can't run inside an aggregate.
-        `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${score} AS score ${FTS_FROM})
+        `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${score} AS score ${from})
          SELECT episode_id FROM matches
          GROUP BY episode_id ORDER BY min(score), episode_id
          LIMIT ? OFFSET ?`,
       )
-      .all(parsed.match, limit, (page - 1) * limit)
+      .all(parsed.match, ...shows, limit, (page - 1) * limit)
       .map((r) => String(r.episode_id)),
   );
   const hits = episodeIds.length
@@ -189,11 +195,11 @@ function bm25Search(db: DatabaseSync, params: SearchParams) {
         () =>
           db
             .prepare(
-              `SELECT ${HIT_COLUMNS}, ${score} AS score ${FTS_FROM}
+              `SELECT ${HIT_COLUMNS}, ${score} AS score ${from}
                AND s.episode_id IN (${placeholders(episodeIds.length)})
                ORDER BY score`,
             )
-            .all(parsed.match, ...episodeIds) as unknown as Hit[],
+            .all(parsed.match, ...shows, ...episodeIds) as unknown as Hit[],
       )
     : [];
   return {
@@ -208,21 +214,31 @@ function bm25Search(db: DatabaseSync, params: SearchParams) {
 }
 
 // BM25 + semantic, fused with RRF: score = sum of 1 / (RRF_K + rank).
+// Both rankings are limited to the chosen channels before taking their top
+// RRF_DEPTH, so small channels aren't crowded out by the rest.
 async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Semantic) {
   const started = performance.now();
-  const { parsed, limit, page } = parse(params);
+  const { parsed, limit, page, shows, from } = parse(params);
   const bm25Ids = fts(
     () =>
       db
         .prepare(
-          `SELECT s.id ${FTS_FROM}
+          `SELECT s.id ${from}
            ORDER BY bm25(sections_fts, ${HEADING_WEIGHT}, ${TEXT_WEIGHT})
            LIMIT ?`,
         )
-        .all(parsed.match, RRF_DEPTH)
+        .all(parsed.match, ...shows, RRF_DEPTH)
         .map((r) => Number(r.id)),
   );
-  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.embed);
+  const episodes = shows.length
+    ? new Set(
+        db
+          .prepare(`SELECT id FROM episodes WHERE channel_id IN (${placeholders(shows.length)})`)
+          .all(...shows)
+          .map((r) => String(r.id)),
+      )
+    : undefined;
+  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.embed, episodes);
   const byKeyword = new Set(bm25Ids);
   const bySemantic = new Set(semanticIds);
 
@@ -241,13 +257,13 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
         .all(...fused) as unknown as Hit[])
     : [];
   const byId = new Map(rows.map((h) => [h.id, h]));
-  const episodes = groupByEpisode(fused.map((id) => ({ ...byId.get(id)!, score: scores.get(id)! })));
-  const hits = episodes.slice((page - 1) * limit, page * limit).flat();
+  const groups = groupByEpisode(fused.map((id) => ({ ...byId.get(id)!, score: scores.get(id)! })));
+  const hits = groups.slice((page - 1) * limit, page * limit).flat();
 
   return {
     mode: "hybrid",
     query: parsed.match,
-    total: episodes.length,
+    total: groups.length,
     page,
     limit,
     took_ms: Math.round(performance.now() - started),

@@ -7,9 +7,15 @@ const results = $("#results");
 const pager = $("#pager");
 const intro = $("#intro");
 const episodeTpl = $("#episode-tpl");
+const picker = $("#shows");
+const showsLabel = $("#shows-label");
+const showsFilter = $("#shows-filter");
+const showsList = $("#shows-list");
 
 const arabicNumber = new Intl.NumberFormat("ar");
 let current = null; // params of the search on screen
+let shows = []; // channels for the picker: {id, name, episodes}
+let selected = new Set(); // ids of the channels to search in; all if empty
 const BADGES = { keyword: "Keyword", semantic: "Semantic" };
 
 function clock(seconds) {
@@ -34,14 +40,80 @@ function timeLink(seconds, href) {
 
 function fromUrl() {
   const url = new URLSearchParams(location.search);
-  return { q: url.get("q") ?? "", page: Number(url.get("page")) || 1, mode: url.get("mode") ?? "hybrid" };
+  return {
+    q: url.get("q") ?? "",
+    page: Number(url.get("page")) || 1,
+    mode: url.get("mode") ?? "hybrid",
+    shows: (url.get("shows") ?? "").split(",").filter(Boolean),
+  };
 }
 
 function toQueryString(p) {
   const url = new URLSearchParams({ q: p.q });
   if (p.page > 1) url.set("page", p.page);
   if (p.mode === "keyword") url.set("mode", "keyword");
+  if (p.shows.length) url.set("shows", p.shows.join(","));
   return url.toString();
+}
+
+// Channel picker
+
+function renderShows() {
+  showsList.replaceChildren(
+    ...shows.map((s) => {
+      const box = el("input", { type: "checkbox", value: s.id, checked: selected.has(s.id) });
+      const count = el("span", { className: "count", textContent: arabicNumber.format(s.episodes) });
+      return el("li", {}, [el("label", {}, [box, el("span", { textContent: s.name }), count])]);
+    }),
+  );
+  filterShows();
+  updateShowsLabel();
+}
+
+// Lowercase, drop diacritics and fold alef/yeh/teh marbuta variants, so
+// "اذاعه" finds "إذاعة".
+function fold(s) {
+  return s
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه");
+}
+
+function filterShows() {
+  const needle = fold(showsFilter.value.trim());
+  showsList.querySelectorAll("li").forEach((li, i) => {
+    li.hidden = !!needle && !fold(shows[i].name).includes(needle);
+  });
+}
+
+function updateShowsLabel() {
+  const ids = [...selected];
+  showsLabel.textContent = !ids.length
+    ? "كل القنوات"
+    : ids.length === 1
+      ? (shows.find((s) => s.id === ids[0])?.name ?? "قناة واحدة")
+      : `${arabicNumber.format(ids.length)} قنوات`;
+  picker.classList.toggle("active", ids.length > 0);
+}
+
+function setSelected(ids) {
+  selected = new Set(ids);
+  showsList.querySelectorAll("input").forEach((box) => (box.checked = selected.has(box.value)));
+  updateShowsLabel();
+}
+
+function showsChanged() {
+  updateShowsLabel();
+  if (input.value.trim()) form.requestSubmit();
+}
+
+async function loadShows() {
+  const res = await fetch("/api/shows");
+  if (!res.ok) return;
+  shows = (await res.json()).map((s) => ({ ...s, id: String(s.id) }));
+  renderShows();
 }
 
 // Search
@@ -158,7 +230,28 @@ function renderSection(hit) {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  run({ q: input.value.trim(), page: 1, mode: keywordOnly.checked ? "keyword" : "hybrid" });
+  run({ q: input.value.trim(), page: 1, mode: keywordOnly.checked ? "keyword" : "hybrid", shows: [...selected] });
+});
+
+showsList.addEventListener("change", (e) => {
+  if (e.target.checked) selected.add(e.target.value);
+  else selected.delete(e.target.value);
+  showsChanged();
+});
+
+showsFilter.addEventListener("input", filterShows);
+showsFilter.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") e.preventDefault(); // don't submit the search
+});
+
+$("#shows-clear").addEventListener("click", () => {
+  if (!selected.size) return;
+  setSelected([]);
+  showsChanged();
+});
+
+document.addEventListener("click", (e) => {
+  if (picker.open && !picker.contains(e.target)) picker.open = false;
 });
 
 keywordOnly.addEventListener("change", () => {
@@ -178,10 +271,13 @@ addEventListener("popstate", () => {
   const p = fromUrl();
   input.value = p.q;
   keywordOnly.checked = p.mode === "keyword";
+  setSelected(p.shows);
   run(p, { push: false });
 });
 
 const initial = fromUrl();
 input.value = initial.q;
 keywordOnly.checked = initial.mode === "keyword";
+selected = new Set(initial.shows);
+loadShows();
 if (initial.q) run(initial, { push: false });

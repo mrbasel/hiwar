@@ -16,7 +16,19 @@
         <input id="q" name="q" type="search" placeholder="ابحث في كل الحلقات…" autocomplete="off" autofocus aria-label="Search">
         <button type="submit">ابحث</button>
       </div>
-      <label class="option"><input id="keyword" type="checkbox"> بحث بالكلمات فقط</label>
+      <div class="options">
+        <label class="option"><input id="keyword" type="checkbox"> بحث بالكلمات فقط</label>
+        <details id="shows" class="picker">
+          <summary id="shows-label">كل القنوات</summary>
+          <div class="panel">
+            <div class="panel-head">
+              <input id="shows-filter" type="search" placeholder="ابحث عن قناة…" autocomplete="off" aria-label="Filter channels">
+              <button id="shows-clear" type="button">كل القنوات</button>
+            </div>
+            <ul id="shows-list"></ul>
+          </div>
+        </details>
+      </div>
     </form>
   </header>
 
