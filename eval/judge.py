@@ -8,9 +8,9 @@ the best-ranked section of each of a run's top 10 episodes (so `eval.run
 you can't tell which method or rank a result came from. An episode's sections
 stay together, in the order they're in the episode, so you read it once. Grades are appended to eval/judgments.jsonl as you press keys.
 
-Results with an accepted model grade (see eval.data) are marked "auto" and
-skipped when moving to the next result, so you only review the rest. The
-model's grade isn't shown; grade an auto result to override it.
+Results with an accepted or tiebreak model grade (see eval.data) are marked
+"auto" and skipped when moving to the next result, so you only review the
+rest. The model's grade isn't shown; grade an auto result to override it.
 """
 
 import argparse
@@ -21,7 +21,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .data import add_judgment, grade_of, load_judgments, load_model_grades, load_queries, load_runs
+from .data import (
+    add_judgment, grade_of, load_judgments, load_model_grades, load_queries, load_runs, load_tiebreak_grades,
+)
 
 PAGE = Path(__file__).parent / "judge.html"
 
@@ -46,6 +48,13 @@ def pool(runs, qid, depth):
     groups = list(episodes.values())
     random.Random(qid).shuffle(groups)
     return [r for group in groups for r in sorted(group, key=lambda r: r["idx"])]
+
+
+def auto_grades():
+    spans = load_model_grades()
+    for key, items in load_tiebreak_grades().items():
+        spans[key] = spans[key] + items
+    return spans
 
 
 def make_handler(conn, depth):
@@ -76,7 +85,7 @@ def make_handler(conn, depth):
             self.send({"ok": True})
 
         def queries(self):
-            runs, judgments, auto = load_runs(), load_judgments(), load_model_grades()
+            runs, judgments, auto = load_runs(), load_judgments(), auto_grades()
             out = []
             for q in load_queries():
                 items = pool(runs, q["id"], depth)
@@ -87,7 +96,7 @@ def make_handler(conn, depth):
             return out
 
         def items(self, qid):
-            judgments, auto = load_judgments(), load_model_grades()
+            judgments, auto = load_judgments(), auto_grades()
             out = []
             for r in pool(load_runs(), qid, depth):
                 row = conn.execute(

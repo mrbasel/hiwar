@@ -15,16 +15,21 @@ the prompt so old grades aren't mixed in. Your own grades always take
 precedence.
 
 Decision models (typesafe/jev-*) go through OpenRouter's Decisions API and
-return a probability per grade; anything else is called as a chat model and
-asked for a short reason and a grade. The key comes from OPENROUTER_API_KEY,
-or opencode's saved OpenRouter key.
+return a probability per grade; claude-code/<model> runs `claude -p` with that
+model (and claude-code/<model>:<effort> with that effort level) on your
+Claude subscription; anything else is called as a chat model
+and asked for a short reason and a grade. The key comes from
+OPENROUTER_API_KEY, or opencode's saved OpenRouter key.
 """
 
 import argparse
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -34,7 +39,7 @@ from pathlib import Path
 
 from .data import (
     CHECK_MODEL, JUDGE_MODEL, LLM_JUDGMENTS, PROMPT_VERSION,
-    grade_of, load_judgments, load_queries, load_runs, read_jsonl,
+    grade_of, load_judgments, load_model_grades, load_queries, load_runs, read_jsonl,
 )
 from .judge import pool
 
@@ -108,15 +113,70 @@ def ask_chat(model, state, key):
         "messages": [{"role": "system", "content": CHAT_PROMPT},
                      {"role": "user", "content": json.dumps(state, ensure_ascii=False)}],
     }, key)
-    text = r["choices"][0]["message"]["content"] or ""
+    out = parse_reply(r["choices"][0]["message"]["content"] or "")
+    return {"grade": out["grade"], "reason": out.get("reason", ""), "served_by": r.get("model", model)}
+
+
+def parse_reply(text):
     match = re.search(r"\{.*\}", text, re.S)
     out = json.loads(match.group()) if match else {}
     if out.get("grade") not in (0, 1, 2):
         raise RuntimeError(f"unparseable reply: {text[:200]!r}")
-    return {"grade": out["grade"], "reason": out.get("reason", ""), "served_by": r.get("model", model)}
+    return out
+
+
+class UsageLimit(RuntimeError):
+    pass
+
+
+# claude -p calls start at most once every PACE seconds, and stop for good after a
+# usage limit, so a long run doesn't burn the subscription's 5-hour window.
+PACE = 3.0
+pace_lock = threading.Lock()
+next_call = 0.0
+limit_hit = threading.Event()
+
+
+def wait_turn():
+    global next_call
+    with pace_lock:
+        now = time.monotonic()
+        delay = max(0.0, next_call - now)
+        next_call = max(now, next_call) + PACE
+    time.sleep(delay)
+
+
+def ask_claude_code(model, state, key, tries=3):
+    claude = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
+    name, _, effort = model.removeprefix("claude-code/").partition(":")
+    cmd = [claude, "-p", "--model", name, *(["--effort", effort] if effort else []), "--system-prompt", CHAT_PROMPT,
+           "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
+    for attempt in range(tries):
+        if limit_hit.is_set():
+            raise UsageLimit("stopped after a usage limit")
+        wait_turn()
+        proc = subprocess.run(cmd, input=json.dumps(state, ensure_ascii=False), capture_output=True,
+                              text=True, timeout=600, cwd="/tmp")
+        try:
+            r = json.loads(proc.stdout)
+            if r.get("is_error"):
+                if re.search(r"hit your .*limit", r.get("result") or ""):
+                    limit_hit.set()
+                    raise UsageLimit(r["result"])
+                raise RuntimeError(r.get("result"))
+            out = parse_reply(r["result"])
+            return {"grade": out["grade"], "reason": out.get("reason", ""), "served_by": next(iter(r["modelUsage"]))}
+        except UsageLimit:
+            raise
+        except Exception as err:
+            if attempt == tries - 1:
+                raise RuntimeError(f"{err}; stderr: {proc.stderr[:300]!r}") from err
+        time.sleep(5 * 2 ** attempt)
 
 
 def ask(model, state, key):
+    if model.startswith("claude-code/"):
+        return ask_claude_code(model, state, key)
     return (ask_decision if model.startswith("typesafe/") else ask_chat)(model, state, key)
 
 
@@ -141,7 +201,7 @@ def cached(model):
     return out
 
 
-def grade_all(conn, model, todo, queries, key, workers=8):
+def grade_all(conn, model, todo, queries, key, workers=4):
     """Grade (qid, episode_id, start, end) spans not graded yet; return all grades."""
     have = cached(model)
     missing = [t for t in todo if t not in have]
@@ -166,7 +226,8 @@ def grade_all(conn, model, todo, queries, key, workers=8):
         for n, (span, result) in enumerate(ex.map(work, jobs), 1):
             if isinstance(result, Exception):
                 failed += 1
-                print(f"  failed {span}: {result}")
+                if not isinstance(result, UsageLimit) or str(result) != "stopped after a usage limit":
+                    print(f"  failed {span}: {result}")
                 continue
             line = {"qid": span[0], "episode_id": span[1], "start": span[2], "end": span[3],
                     "model": model, "prompt_version": PROMPT_VERSION, **result}
@@ -176,6 +237,8 @@ def grade_all(conn, model, todo, queries, key, workers=8):
             if n % 25 == 0:
                 print(f"  {model}: {n}/{len(missing)}")
     print(f"{model}: {len(todo) - len(missing)} cached, {len(missing) - failed} new, {failed} failed")
+    if limit_hit.is_set():
+        raise SystemExit("hit a usage limit; rerun later to grade the rest (graded results are kept)")
     return have
 
 
@@ -220,43 +283,48 @@ def human_spans():
     return {(qid, ep, s, e): g for (qid, ep), spans in load_judgments().items() for s, e, g in spans}
 
 
-def calibrate(conn, models, key):
+def calibrate(conn, models, key, workers):
     queries = {q["id"]: q for q in load_queries()}
     human = human_spans()
     sections = {span: section_for(conn, span[1], span[2], span[3])[1] for span in human}
     for model in models:
-        grades = grade_all(conn, model, list(human), queries, key)
+        grades = grade_all(conn, model, list(human), queries, key, workers)
         report(model, [(s, h, grades[s]) for s, h in human.items() if s in grades], queries, sections)
 
 
-def judge(conn, models, depth, key):
+def judge(conn, models, depth, key, workers, unresolved=False):
+    """unresolved=True grades only what neither you nor the accepted model
+    grades cover, for the tiebreak model."""
     queries = {q["id"]: q for q in load_queries()}
-    runs, judgments = load_runs(), load_judgments()
+    runs, judgments, auto = load_runs(), load_judgments(), load_model_grades()
     todo = [
         (qid, r["episode_id"], r["start"], r["end"])
         for qid in queries
         for r in pool(runs, qid, depth)
-        if grade_of(judgments, qid, r) is None
+        if grade_of(judgments, qid, r) is None and not (unresolved and grade_of(auto, qid, r) is not None)
     ]
-    print(f"{len(todo)} pooled results without your grade")
+    print(f"{len(todo)} pooled results without your grade" + (" or an accepted model grade" if unresolved else ""))
     for model in models:
-        grade_all(conn, model, todo, queries, key)
+        grade_all(conn, model, todo, queries, key, workers)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["calibrate", "judge"])
+    parser.add_argument("mode", choices=["calibrate", "judge", "tiebreak"])
     parser.add_argument("--models", nargs="+", default=[JUDGE_MODEL, CHECK_MODEL])
     parser.add_argument("--depth", type=int, default=20, help="top N of each run to judge")
     parser.add_argument("--db", default="podcasts.db")
+    parser.add_argument("--workers", type=int, default=4, help="parallel model calls")
+    parser.add_argument("--pace", type=float, default=PACE, help="min seconds between claude-code calls")
     args = parser.parse_args()
+    globals()["PACE"] = args.pace
 
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     key = api_key()
     if args.mode == "calibrate":
-        calibrate(conn, args.models, key)
+        calibrate(conn, args.models, key, args.workers)
     else:
-        judge(conn, args.models, args.depth, key)
+        judge(conn, args.models, args.depth, key, args.workers, unresolved=args.mode == "tiebreak")
 
 
 if __name__ == "__main__":

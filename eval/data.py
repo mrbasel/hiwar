@@ -6,8 +6,9 @@ of the judged span that covers most of it, if that covers at least half.
 
 Model grades (eval/llm_judgments.jsonl, from eval.llm_judge) fill in what
 you haven't graded, but only where they're trustworthy: the judge model is
-confident and the check model gives the same grade. Everything else is left
-for you to review. Your own grades always win.
+confident and the check model gives the same grade. The rest get the
+tiebreak model's grade, which is weaker: on such cases it matched about half
+of your grades. Your own grades always win.
 """
 
 import json
@@ -28,6 +29,10 @@ PROMPT_VERSION = 2
 JUDGE_MODEL = "typesafe/jev-1.14"
 CHECK_MODEL = "anthropic/claude-haiku-5.5"
 MIN_CONFIDENCE = 0.5
+# Grades what the two above don't settle (`eval.llm_judge tiebreak`). On 33 of
+# your grades they didn't settle it matched 16; Haiku 17, Jev 13, a median of
+# the three 16.
+TIEBREAK_MODEL = "claude-code/claude-opus-5-5"
 
 
 def read_jsonl(path):
@@ -74,18 +79,34 @@ def load_model_grades():
     return spans
 
 
+def load_tiebreak_grades():
+    """The tiebreak model's grades, in the same shape as load_judgments()."""
+    lines = {}
+    for j in read_jsonl(LLM_JUDGMENTS):
+        if j["prompt_version"] == PROMPT_VERSION and j["model"] == TIEBREAK_MODEL:
+            lines[(j["qid"], j["episode_id"], j["start"], j["end"])] = j["grade"]
+    spans = defaultdict(list)
+    for (qid, episode_id, start, end), grade in lines.items():
+        spans[(qid, episode_id)].append((start, end, grade))
+    return spans
+
+
 def load_grades(unconfirmed=True):
     """Every known grade: {qid: {(episode_id, start, end): (grade, source)}}.
 
     source is "you", "confirmed" (an accepted model grade) or, with
-    unconfirmed=True, "jev" (the judge model's grade where it wasn't
-    accepted). Queries with same_need_as also get that query's grades.
+    unconfirmed=True, "tiebreak" (the tiebreak model's grade) or "jev" (the
+    judge model's grade where neither of those exists). Queries with
+    same_need_as also get that query's grades.
     """
     grades = defaultdict(dict)
     if unconfirmed:
         for j in read_jsonl(LLM_JUDGMENTS):
             if j["model"] == JUDGE_MODEL and j["prompt_version"] == PROMPT_VERSION:
                 grades[j["qid"]][(j["episode_id"], j["start"], j["end"])] = (j["grade"], "jev")
+        for (qid, episode_id), items in load_tiebreak_grades().items():
+            for start, end, grade in items:
+                grades[qid][(episode_id, start, end)] = (grade, "tiebreak")
     for source, spans in (("confirmed", load_model_grades()), ("you", load_judgments())):
         for (qid, episode_id), items in spans.items():
             for start, end, grade in items:

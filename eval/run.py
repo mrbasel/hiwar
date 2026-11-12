@@ -14,8 +14,9 @@ P@5       share of the top 5 that is relevant.
 R@10      share of all known relevant results that are in the top 10.
 judged    share of the top 10 that has a grade. Ungraded results count as
           not relevant, so below ~90% the scores are too low; grade more.
-unconf    share of the grades used that are Jev's alone (not yours, not
-          confirmed by the check model). --strict ignores those grades.
+unconf    share of the grades used that are neither yours nor confirmed by
+          the check model: the tiebreak model's, or Jev's alone where it
+          has none. --strict ignores those grades.
 
 Queries with no known relevant result are left out of the averages (and
 listed); a query where the method returns nothing scores 0.
@@ -54,7 +55,7 @@ def dcg(grades):
     return sum(g / math.log2(i + 2) for i, g in enumerate(grades))
 
 
-SOURCE_RANK = {"jev": 0, "confirmed": 1, "you": 2}
+SOURCE_RANK = {"jev": 0, "tiebreak": 1, "confirmed": 2, "you": 3}
 
 
 def episode_grades(spans):
@@ -91,7 +92,7 @@ def score_query(results, spans, episodes=False):
         "p5": sum(g > 0 for g in grades[:5]) / 5,
         "r10": sum(g > 0 for g in grades) / relevant if relevant else None,
         "judged": len(used) / len(top) if top else None,
-        "unconf": sum(src == "jev" for _, src in used),
+        "unconf": sum(src in ("jev", "tiebreak") for _, src in used),
         "graded": len(used),
         "relevant": relevant,
         "empty": not results,
