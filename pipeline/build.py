@@ -1,9 +1,13 @@
 """Add downloaded episodes to the database.
 
-Called by `pipeline.update` after downloading. Builds every video with status
-'downloaded', except those from sources still backfilling: a channel's
-boilerplate is learned from its whole history, so a new channel waits until
-all of it is downloaded.
+Called by `pipeline.update` after downloading. Builds every video with an
+info.json that isn't in the database yet, except those from sources still
+backfilling (a channel's boilerplate is learned from its whole history, so a
+new channel waits until all of it is downloaded) or dropped as 'no_captions'.
+
+Episodes without a usable Arabic transcript (no captions, captions in another
+language, or nothing left after cleaning) are added too, with empty sections
+from their chapters, so their titles can still be found.
 
 Per channel (one worker each): hash the 8-word runs of every downloaded
 episode of the channel, old and new, to find its boilerplate; then clean each
@@ -20,7 +24,7 @@ from collections import Counter, defaultdict
 from . import db
 from .clean import clean_segments, episode_keys, find_boilerplate, ngram_hashes
 from .parse import find_transcript, read_info
-from .sections import build_sections
+from .sections import build_sections, title_sections
 from .utterances import merge_lines
 
 
@@ -31,9 +35,9 @@ def log(msg):
 def process_channel(task):
     """Boilerplate from all of one channel's episodes, then build the selected ones.
 
-    Returns (built, skipped, stats, errors): built is a list of (episode,
-    sections, words removed), skipped of (video id, reason). Videos that
-    couldn't be read are in neither and stay queued.
+    Returns (built, stats, errors): built is a list of (episode, sections,
+    words removed, reason), with the reason an episode has no transcript.
+    Videos that couldn't be read aren't in it and stay queued.
     """
     data_dir, paths, selected = task
     stats = Counter()
@@ -52,8 +56,8 @@ def process_channel(task):
     del hashes
     stats["boilerplate_ngrams"] = len(boilerplate)
 
-    built, skipped = [], []
-    for video_id, path in selected:
+    built = []
+    for _, path in selected:
         base = data_dir / path
         try:
             ep = read_info(base.with_name(base.name + ".info.json"))
@@ -62,26 +66,36 @@ def process_channel(task):
             stats["unreadable"] += 1
             errors.append(f"{path}: {e!r}")
             continue
-        if ep is None:  # transcript deleted since it was downloaded
-            stats["no_transcript"] += 1
-            skipped.append((video_id, "no_transcript"))
-            continue
+        removed, reason = 0, None
         if segments is None:
-            stats["not_arabic"] += 1
-            skipped.append((video_id, "not_arabic"))
-            continue
-        segments, removed = clean_segments(segments, boilerplate)
-        segments = merge_lines(segments)
-        sections = build_sections(segments, ep["chapters"])
-        if not sections:
-            stats["empty_after_cleaning"] += 1
-            skipped.append((video_id, "empty_after_cleaning"))
-            continue
-        built.append(({**ep, "transcript_source": source}, sections, removed))
+            sections, reason = [], "no Arabic transcript"
+        else:
+            segments, removed = clean_segments(segments, boilerplate)
+            sections = build_sections(merge_lines(segments), ep["chapters"])
+            if not sections:
+                reason = "empty after cleaning"
+        if reason:
+            sections, source = title_sections(ep["chapters"], ep["duration"]), None
+            stats["title_only"] += 1
+        else:
+            stats[f"source_{source}"] += 1
+            stats["words_removed"] += removed
+        built.append(({**ep, "transcript_source": source}, sections, removed, reason))
         stats["episodes"] += 1
-        stats[f"source_{source}"] += 1
-        stats["words_removed"] += removed
-    return built, skipped, stats, errors
+    return built, stats, errors
+
+
+# Videos waiting to be built. 'skipped' ones were left out by older builds,
+# before episodes without a transcript were added.
+QUEUED = "v.status IN ('downloaded', 'no_captions', 'skipped') AND v.path IS NOT NULL"
+
+
+def count_held(conn):
+    """Queued videos whose source is still backfilling."""
+    return conn.execute(
+        "SELECT count(*) FROM videos v JOIN sources s ON s.url = v.source"
+        f" WHERE {QUEUED} AND s.status = 'backfilling'"
+    ).fetchone()[0]
 
 
 def pick(by_channel, limit):
@@ -109,7 +123,7 @@ def build_pending(conn, data_dir, pool, limit=None):
     for video_id, channel_id, path, date in conn.execute(
         "SELECT v.id, v.channel_id, v.path, v.upload_date FROM videos v"
         " LEFT JOIN sources s ON s.url = v.source"
-        " WHERE v.status = 'downloaded' AND coalesce(s.status, '') != 'backfilling'"
+        f" WHERE {QUEUED} AND coalesce(s.status, '') NOT IN ('backfilling', 'no_captions')"
     ):
         if video_id in built_ids:  # e.g. queued again by hand
             db.set_video_status(conn, video_id, "built")
@@ -117,10 +131,7 @@ def build_pending(conn, data_dir, pool, limit=None):
             pending[channel_id].append((video_id, path, date))
     conn.commit()
     selected = pick(pending, limit)
-    held = conn.execute(
-        "SELECT count(*) FROM videos v JOIN sources s ON s.url = v.source"
-        " WHERE v.status = 'downloaded' AND s.status = 'backfilling'"
-    ).fetchone()[0]
+    held = count_held(conn)
     log(f"building {len(selected)} episodes in {len(pending)} channels"
         + (f" ({held} more wait for their source to finish backfilling)" if held else ""))
 
@@ -139,20 +150,18 @@ def build_pending(conn, data_dir, pool, limit=None):
     tasks.sort(key=lambda t: len(t[1]), reverse=True)
 
     totals, errors, per_channel = Counter(), [], {}
-    for built, skipped, stats, errs in pool.imap_unordered(process_channel, tasks):
+    for built, stats, errs in pool.imap_unordered(process_channel, tasks):
         errors += errs
         totals.update(stats)
-        for episode, sections, removed in built:
+        for episode, sections, removed, reason in built:
             db.insert_channel(conn, episode)
             db.insert_episode(conn, episode, sections, removed)
-            db.set_video_status(conn, episode["id"], "built")
-        for video_id, reason in skipped:
-            db.set_video_status(conn, video_id, "skipped", reason)
+            db.set_video_status(conn, episode["id"], "built", reason)
         conn.commit()
         if built:
             name = built[0][0]["channel"] or built[0][0]["channel_id"]
             per_channel[name] = stats["episodes"]
-            log(f"  {name}: {stats['episodes']} episodes, {stats['boilerplate_ngrams']} boilerplate runs, "
-                f"{stats['words_removed']} words removed")
+            log(f"  {name}: {stats['episodes']} episodes ({stats['title_only']} without a transcript), "
+                f"{stats['boilerplate_ngrams']} boilerplate runs, {stats['words_removed']} words removed")
     totals.pop("boilerplate_ngrams", None)
     return totals, per_channel, errors

@@ -20,11 +20,9 @@ def base_of(info_path):
 
 
 def read_info(info_path):
-    """Episode metadata, or None if the episode has no transcript file at all."""
+    """Episode metadata."""
     info_path = Path(info_path)
     base = base_of(info_path)
-    if not any(base.with_name(f"{base.name}.{s}.json3").exists() for s, _ in TRANSCRIPT_SOURCES):
-        return None
     info = json.loads(info_path.read_text(encoding="utf-8"))
     date = info.get("upload_date") or ""
     folder = info_path.parent.name

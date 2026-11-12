@@ -11,12 +11,17 @@ One run:
    channel lands in its own folder:
    - backfilling: every video. A run that gets through the whole list marks
      the source 'complete'. If its first PROBE new videos all lack Arabic
-     captions, it's marked 'no_captions' and left alone from then on.
+     captions, it's marked 'no_captions', their files are deleted, and it's
+     left alone from then on.
    - complete: a channel's newest RECENT videos, or all of them if it wasn't
      checked for FULL_CHECK_DAYS; a playlist (usually oldest first) in full.
    Sources with `enabled = false` are skipped.
    On a rate limit or bot check, downloading stops; the next run picks up.
-4. Builds the downloaded episodes into the database (see pipeline/build.py).
+4. Fetches metadata (info.json only, no captions) for videos known to have no
+   captions and none on disk, METADATA_PER_RUN per run: their titles and
+   chapters are worth searching even without a transcript. A video that has
+   gained captions since is fetched like a failed one on the next run.
+5. Builds the downloaded episodes into the database (see pipeline/build.py).
 
 Exits 0 when everything went through, 2 when downloading stopped on a rate
 limit, 1 on errors. yt-dlp output is appended to logs/sources/<source>.log.
@@ -37,14 +42,15 @@ from multiprocessing import Pool
 from pathlib import Path
 
 from . import db
-from .build import build_pending
-from .download import classify, download_source, fetch_tracks, video_id
+from .build import build_pending, count_held
+from .download import classify, download_source, fetch_tracks, run, video_id
 
 ROOT = Path(__file__).resolve().parent.parent
 RECENT = 50
 FULL_CHECK_DAYS = 7
 PROBE = 40
 MAX_ATTEMPTS = 5
+METADATA_PER_RUN = 300  # YouTube rate-limits at ~330 extractions per session; resumes next run
 
 
 def log(msg):
@@ -169,9 +175,6 @@ def finish_video(conn, video, source, log_file):
     if video["status"] == "failed":
         blocked = fetch_tracks(info_path, video["missing"], video["url"], log_file).blocked
         video = classify(info_path, Path(video["data_dir"])) or video
-    if video["status"] == "no_captions":
-        info_path.unlink(missing_ok=True)  # ~700 KB each, and nothing to build from
-        video["path"] = None
     db.save_video(conn, video, source)
     return video["status"], blocked
 
@@ -235,6 +238,56 @@ def retry_failed(conn, data_dir, log_dir):
     return False
 
 
+def fetch_metadata(conn, data_dir, log_dir, limit=METADATA_PER_RUN):
+    """Fetch info.json only for videos with no captions. True if rate-limited.
+
+    Sources dropped as 'no_captions' are left out, like their downloads: they
+    were likely not Arabic podcasts. Each video is tried up to MAX_ATTEMPTS
+    times, so ones that are gone don't block the queue.
+    """
+    ids = [vid for (vid,) in conn.execute(
+        "SELECT v.id FROM videos v LEFT JOIN sources s ON s.url = v.source"
+        " WHERE v.status = 'no_captions' AND v.path IS NULL"
+        " AND coalesce(s.status, '') != 'no_captions' AND v.attempts < ?"
+        " ORDER BY v.upload_date LIMIT ?",
+        (MAX_ATTEMPTS, limit),
+    )]
+    if not ids:
+        return False
+    log(f"fetching metadata of {len(ids)} videos without captions")
+    fd, batch = tempfile.mkstemp(prefix="podcasts-metadata-", suffix=".txt")
+    with os.fdopen(fd, "w") as f:
+        f.writelines(f"https://www.youtube.com/watch?v={vid}\n" for vid in ids)
+    counts = Counter()
+    try:
+        with open(log_dir / "_metadata.log", "a") as f:
+            f.write(f"\n=== {db.now()}\n")
+            result = run([
+                "--write-info-json", "--no-write-playlist-metafiles",
+                # Same layout as downloaded videos, so folders don't split in two.
+                "-o", f"{data_dir}/%(channel)s/%(upload_date)s_%(id)s.%(ext)s",
+                # No archive: every one of these ids is already in it.
+                "--batch-file", batch,
+                # Nothing is downloaded, so don't wait between videos.
+                "--sleep-interval", "1", "--max-sleep-interval", "3",
+            ], f)
+    finally:
+        os.unlink(batch)
+    for path in result.written:
+        video = classify(path, data_dir)
+        if video is None:  # cut off mid-write; not recorded, so tried again
+            continue
+        db.save_video(conn, video)
+        counts[video["status"]] += 1
+    if not result.blocked:  # a killed batch never reached most of these
+        conn.executemany("UPDATE videos SET attempts = attempts + 1 WHERE id = ?", [(v,) for v in ids])
+    conn.commit()
+    log("  " + ", ".join(f"{n} {status}" for status, n in sorted(counts.items())))
+    if result.blocked:
+        log("  rate-limited while fetching metadata; the next run continues")
+    return result.blocked
+
+
 def download_all(conn, sources, data_dir, log_dir, only=None):
     """Download every source in turn. Returns (rate-limited, errors)."""
     errors = []
@@ -265,6 +318,10 @@ def download_all(conn, sources, data_dir, log_dir, only=None):
 
             notes = []
             if run.no_captions:
+                # Likely not an Arabic podcast: don't add its videos by title either.
+                for path in run.written:
+                    path.unlink(missing_ok=True)
+                conn.execute("UPDATE videos SET path = NULL WHERE source = ? AND status = 'no_captions'", (url,))
                 conn.execute("UPDATE sources SET status = 'no_captions' WHERE url = ?", (url,))
                 notes.append(f"first {PROBE} new videos have no Arabic captions; skipping this source from now on")
             elif not blocked and not run.listing_failed:
@@ -303,12 +360,14 @@ def print_status(conn, sources):
     print("\nvideos: " + ", ".join(
         f"{n} {status}" for status, n in conn.execute("SELECT status, count(*) FROM videos GROUP BY status")
     ))
-    held = conn.execute(
-        "SELECT count(*) FROM videos v JOIN sources s ON s.url = v.source"
-        " WHERE v.status = 'downloaded' AND s.status = 'backfilling'"
-    ).fetchone()[0]
+    held = count_held(conn)
     if held:
         print(f"{held} downloaded videos wait for their source to finish backfilling")
+    backlog = conn.execute(
+        "SELECT count(*) FROM videos WHERE status = 'no_captions' AND path IS NULL"
+    ).fetchone()[0]
+    if backlog:
+        print(f"{backlog} videos without captions wait for metadata")
 
 
 def main():
@@ -321,6 +380,8 @@ def main():
     ap.add_argument("--limit", type=int, help="only build this many episodes, for quick checks")
     ap.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1),
                     help="parallel processes (each holds one channel's hashes in memory)")
+    ap.add_argument("--metadata-limit", type=int, default=METADATA_PER_RUN,
+                    help="videos without captions to fetch metadata for this run")
     ap.add_argument("--status", action="store_true", help="show each source's status and exit")
     args = ap.parse_args()
 
@@ -350,6 +411,8 @@ def main():
                 blocked, errs = download_all(conn, sources, data_dir, log_dir,
                                              args.source and args.source.rstrip("/"))
                 errors += errs
+            if not blocked:  # new episodes matter more than title-only ones
+                blocked = fetch_metadata(conn, data_dir, log_dir, args.metadata_limit)
         totals, per_channel, build_errors = build_pending(conn, data_dir, pool, args.limit)
         errors += build_errors
 

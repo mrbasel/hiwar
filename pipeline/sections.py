@@ -7,6 +7,10 @@ TARGET_SECTION. Episodes without chapters are cut into TARGET_SECTION blocks.
 Cuts go at a `>>` speaker change or the longest pause near the target time;
 chapter starts, which are set by hand and often fall mid-sentence, are moved
 the same way within CHAPTER_SNAP seconds.
+
+Episodes without a transcript get one empty section per chapter, as on
+YouTube, or a single one for the whole episode; their titles are still
+searched.
 """
 
 import math
@@ -102,6 +106,15 @@ def split_long(span, limit):
 def section_text(segments):
     text = " ".join(seg["text"] for seg in segments)
     return re.sub(r"\s*>>\s*", "\n", text).strip()  # one line per speaker turn
+
+
+def title_sections(chapters, duration):
+    """Sections without text for an episode without a transcript."""
+    chapters = chapters or [{"title": NO_CHAPTER_TITLE, "start": 0, "end": duration}]
+    return [
+        {"title": c["title"], "start": c["start"], "end": c["end"], "text": "", "segments": []}
+        for c in chapters
+    ]
 
 
 def build_sections(segments, chapters):

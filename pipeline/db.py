@@ -3,7 +3,8 @@
 sources   channels and playlists from sources.toml, with their download status
 videos    every video we've looked at and what happened to it; the download
           archive (videos here are never fetched again) and the build queue
-episodes  one row per video with a usable Arabic transcript
+episodes  one row per video; those without a usable Arabic transcript have
+          empty sections from their chapters and no segments
 sections  chapter-sized blocks of an episode; what gets searched and read
 segments  utterances (caption lines merged at speaker changes and pauses,
           ~5-15 s each) with timestamps, for citing a moment
@@ -38,8 +39,8 @@ CREATE TABLE IF NOT EXISTS videos (
     channel_id TEXT,
     path TEXT,                         -- data/-relative path without extension; NULL once deleted
     upload_date TEXT,                  -- YYYYMMDD
-    status TEXT,                       -- 'downloaded', 'failed', 'no_captions', 'built' or 'skipped'
-    reason TEXT,                       -- why it was skipped, or which track failed
+    status TEXT,                       -- 'downloaded', 'failed', 'no_captions', 'built' or 'skipped' (by old builds)
+    reason TEXT,                       -- which track failed, or why it was built without a transcript
     attempts INTEGER DEFAULT 0,        -- caption downloads retried after failing
     first_seen TEXT,
     updated_at TEXT
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     url TEXT,
     description TEXT,
     chapters TEXT,                     -- JSON list of {title, start, end}, as on YouTube
-    transcript_source TEXT,            -- 'human' or 'auto'
+    transcript_source TEXT,            -- 'human' or 'auto'; NULL without a transcript
     word_count INTEGER,                -- after cleaning
     boilerplate_words INTEGER          -- removed by cleaning
 );
