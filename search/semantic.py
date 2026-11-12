@@ -1,8 +1,9 @@
-"""Semantic search over the documents written by `search.embed`.
+"""Semantic search over the documents `search.embed` keeps in the database.
 
-Brute force: the query vector against every document vector. Results are
-sections, like the other methods: a chapter hit becomes the section that
-overlaps it most, and an episode hit the episode's first section.
+Brute force: the query vector against every document vector, held in memory.
+Results are sections, like the other methods: each document is stored with
+the section a hit on it opens, a chapter's the section that overlaps it most
+and an episode's its first section.
 
 Query vectors are cached in embeddings/<model>/queries.jsonl, keyed by the
 exact query text, so repeated runs over the eval queries make no API calls.
@@ -18,11 +19,13 @@ from .openrouter import api_key, embed
 
 
 @cache
-def load(model):
-    out = out_dir(model)
-    vectors = np.load(out / "vectors.npy").astype(np.float32)
-    docs = [json.loads(line) for line in (out / "docs.jsonl").open(encoding="utf-8")]
-    return vectors, docs
+def load(conn, model):
+    """Vectors, kinds and section ids of the model's documents with a section."""
+    table = conn.execute("SELECT table_name FROM embedding_models WHERE model = ?", (model,)).fetchone()[0]
+    rows = conn.execute(
+        f"SELECT vector, kind, section_id FROM {table} WHERE section_id IS NOT NULL ORDER BY id").fetchall()
+    vectors = np.frombuffer(b"".join(r[0] for r in rows), dtype="<f2").reshape(len(rows), -1)
+    return vectors.astype(np.float32), [r[1] for r in rows], [r[2] for r in rows]
 
 
 @cache
@@ -44,32 +47,21 @@ def embed_query(model, query):
     return cached[query]
 
 
-def to_section(conn, doc):
-    if doc["kind"] == "chapter":
-        return conn.execute(
-            """SELECT idx, start_time, end_time FROM sections
-               WHERE episode_id = ? AND start_time < ? AND end_time > ?
-               ORDER BY min(end_time, ?) - max(start_time, ?) DESC LIMIT 1""",
-            (doc["episode_id"], doc["end"], doc["start"], doc["end"], doc["start"]),
-        ).fetchone()
-    return conn.execute(
-        "SELECT idx, start_time, end_time FROM sections WHERE episode_id = ? ORDER BY idx LIMIT 1",
-        (doc["episode_id"],),
-    ).fetchone()
-
-
 def search(conn, query, k, model):
-    vectors, docs = load(model)
+    vectors, kinds, sections = load(conn, model)
     scores = vectors @ embed_query(model, query)
     results, seen = [], set()
     for i in np.argsort(-scores):
-        section = to_section(conn, docs[i])
-        if section is None or (docs[i]["episode_id"], section[0]) in seen:
+        if sections[i] in seen:
             continue
-        seen.add((docs[i]["episode_id"], section[0]))
-        idx, start, end = section
-        results.append({"episode_id": docs[i]["episode_id"], "idx": idx, "start": start, "end": end,
-                        "score": round(float(scores[i]), 4), "doc": docs[i]["kind"]})
+        seen.add(sections[i])
+        section = conn.execute(
+            "SELECT episode_id, idx, start_time, end_time FROM sections WHERE id = ?", (sections[i],)).fetchone()
+        if section is None:  # episode gone from the database
+            continue
+        episode_id, idx, start, end = section
+        results.append({"episode_id": episode_id, "idx": idx, "start": start, "end": end,
+                        "score": round(float(scores[i]), 4), "doc": kinds[i]})
         if len(results) == k:
             break
     return results

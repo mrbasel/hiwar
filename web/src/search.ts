@@ -231,15 +231,8 @@ async function hybridSearch(db: DatabaseSync, params: SearchParams, semantic: Se
         .all(parsed.match, ...shows, RRF_DEPTH)
         .map((r) => Number(r.id)),
   );
-  const episodes = shows.length
-    ? new Set(
-        db
-          .prepare(`SELECT id FROM episodes WHERE channel_id IN (${placeholders(shows.length)})`)
-          .all(...shows)
-          .map((r) => String(r.id)),
-      )
-    : undefined;
-  const semanticIds = await semanticSearch(db, semantic.index, params.q, RRF_DEPTH, semantic.embed, episodes);
+  const channels = shows.length ? new Set(shows) : undefined;
+  const semanticIds = await semanticSearch(semantic.index, params.q, RRF_DEPTH, semantic.embed, channels);
   const byKeyword = new Set(bm25Ids);
   const bySemantic = new Set(semanticIds);
 

@@ -2,13 +2,16 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { openDb, QueryError, search, type SearchParams, type Semantic } from "./search.js";
-import { loadIndex, localEmbedder, openRouterEmbedder } from "./semantic.js";
+import { loadIndex, localEmbedder, openRouterEmbedder, type Index } from "./semantic.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const ENV_FILE = path.join(ROOT, ".env");
 if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 const DB_PATH = process.env.DB_PATH ?? path.join(ROOT, "podcasts.db");
+// Its embeddings are in the database, written by `search.embed`.
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "baai/bge-m3";
+// For map.json.
 const EMBEDDINGS_DIR = process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3");
 // Local model, downloaded on first start (~2.3 GB).
 const MODELS_DIR = process.env.MODELS_DIR ?? path.join(ROOT, "models");
@@ -20,20 +23,25 @@ const HOST = process.env.HOST ?? "0.0.0.0";
 const db = openDb(DB_PATH);
 
 let semantic: Semantic | undefined;
+let index: Index | undefined;
 if (QUERY_EMBEDDER === "openrouter" && !process.env.OPENROUTER_KEY) {
   console.warn("OPENROUTER_KEY not set: BM25 search only");
-} else if (!fs.existsSync(path.join(EMBEDDINGS_DIR, "vectors.npy"))) {
-  console.warn(`no embeddings in ${EMBEDDINGS_DIR}: BM25 search only`);
 } else {
-  let started = performance.now();
-  const index = loadIndex(EMBEDDINGS_DIR);
-  console.log(
-    `loaded ${index.docs.length} embeddings (${index.model}) in ${Math.round(performance.now() - started)} ms`,
-  );
+  const started = performance.now();
+  index = loadIndex(db, EMBEDDING_MODEL);
+  if (index) {
+    console.log(
+      `loaded ${index.sections.length} embeddings (${index.model}) in ${Math.round(performance.now() - started)} ms`,
+    );
+  } else {
+    console.warn(`no ${EMBEDDING_MODEL} embeddings in ${DB_PATH}: BM25 search only`);
+  }
+}
+if (index) {
   if (QUERY_EMBEDDER === "openrouter") {
     semantic = { index, embed: openRouterEmbedder(index.model, process.env.OPENROUTER_KEY!) };
   } else {
-    started = performance.now();
+    const started = performance.now();
     console.log(`loading ${index.model} for queries from ${MODELS_DIR} (downloaded on first start)`);
     try {
       semantic = { index, embed: await localEmbedder(index.model, MODELS_DIR) };

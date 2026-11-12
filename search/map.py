@@ -2,7 +2,7 @@
 
     uv run python -m search.map [--db PATH] [--model MODEL]
 
-Takes the episode vectors written by `search.embed` (chapters are left out)
+Takes the episode vectors `search.embed` keeps in the database (chapters are left out)
 and reduces them twice with UMAP: to 2D for drawing, and to 5D for HDBSCAN to
 find clusters in, which keeps the clusters from depending on how the 2D layout
 happened to squash things. Each cluster is labelled with the words most
@@ -22,7 +22,7 @@ import numpy as np
 import umap
 from sklearn.cluster import HDBSCAN
 
-from .embed import out_dir
+from .embed import out_dir, table_name
 
 WORD = re.compile(r"[\w\u0600-\u06FF]{3,}")
 DIACRITICS = re.compile(r"[\u064B-\u0652\u0640]")
@@ -72,18 +72,17 @@ def main():
     args = parser.parse_args()
 
     out = out_dir(args.model)
-    docs = [json.loads(line) for line in (out / "docs.jsonl").open(encoding="utf-8")]
-    rows = [i for i, d in enumerate(docs) if d["kind"] == "episode"]
-    vectors = np.load(out / "vectors.npy", mmap_mode="r")[rows].astype(np.float32)
-
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+    built_at = conn.execute("SELECT built_at FROM embedding_models WHERE model = ?", (args.model,)).fetchone()[0]
     episodes = {r[0]: r[1:] for r in conn.execute(
         """SELECT e.id, e.title, e.date, e.chapters, coalesce(c.name, e.show, '')
            FROM episodes e LEFT JOIN channels c ON c.id = e.channel_id""")}
-    keep = [n for n, i in enumerate(rows) if docs[i]["episode_id"] in episodes]  # skip deleted episodes
-    vectors = vectors[keep]
-    ids = [docs[rows[n]]["episode_id"] for n in keep]
-    print(f"{len(ids)} episodes ({len(rows) - len(keep)} no longer in the database)")
+    rows = conn.execute(
+        f"SELECT episode_id, vector FROM {table_name(args.model)} WHERE kind = 'episode' ORDER BY id").fetchall()
+    rows = [r for r in rows if r[0] in episodes]  # skip deleted episodes
+    ids = [r[0] for r in rows]
+    vectors = np.frombuffer(b"".join(r[1] for r in rows), dtype="<f2").reshape(len(rows), -1).astype(np.float32)
+    print(f"{len(ids)} episodes")
 
     started = time.time()
     xy = umap.UMAP(n_neighbors=args.neighbors, min_dist=0.05, metric="cosine",
@@ -117,9 +116,8 @@ def main():
         clusters.append({"id": int(c), "label": name, "size": len(members),
                          "x": round(float(center[0]), 4), "y": round(float(center[1]), 4)})
 
-    meta = json.loads((out / "meta.json").read_text())
     (out / "map.json").write_text(json.dumps(
-        {"model": args.model, "built_at": meta["built_at"], "channels": channels,
+        {"model": args.model, "built_at": built_at, "channels": channels,
          "clusters": clusters, "points": points},  # point: [id, x, y, cluster, channel, title, date]
         ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"-> {out / 'map.json'}")

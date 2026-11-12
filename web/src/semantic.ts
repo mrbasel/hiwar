@@ -1,11 +1,9 @@
-// Semantic search over the episode and chapter embeddings written by
-// `search.embed` (Python), mirroring search/semantic.py: brute force over
-// every vector, each hit mapped to a section of the current database.
+// Semantic search over the episode and chapter embeddings that `search.embed`
+// (Python) keeps in the database: every vector is held in memory and scored
+// against the query, and each hit becomes the section stored with it.
 // Queries are embedded locally or through OpenRouter.
 
 import { DatabaseSync } from "node:sqlite";
-import fs from "node:fs";
-import path from "node:path";
 import { env, pipeline } from "@huggingface/transformers";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
@@ -19,45 +17,48 @@ export type Embedder = (query: string) => Promise<Float32Array>;
 // Recent query vectors, so paging keeps the same ranking. Oldest dropped first.
 const queryCache = new Map<string, Float32Array>();
 
-interface Doc {
-  kind: "episode" | "chapter";
-  episode_id: string;
-  start: number;
-  end: number;
-}
-
 export interface Index {
   model: string;
   dims: number;
   vectors: Float32Array; // row-major, one unit-length row per doc
-  docs: Doc[];
+  sections: Int32Array; // the section each doc opens
+  channels: string[]; // each doc's channel id
 }
 
-// vectors.npy is a little-endian float16 matrix: a short header, then the raw data.
-function readNpy(file: string): { shape: number[]; data: Float32Array } {
-  const buf = fs.readFileSync(file);
-  const headerLen = buf.readUInt16LE(8);
-  const header = buf.toString("latin1", 10, 10 + headerLen);
-  if (!header.includes("'<f2'")) throw new Error(`${file}: expected float16 data`);
-  const shape = header.match(/\((\d+), (\d+)\)/)!.slice(1).map(Number);
-  const offset = 10 + headerLen;
-  const halves = new Float16Array(buf.buffer, buf.byteOffset + offset, shape[0] * shape[1]);
-  return { shape, data: Float32Array.from(halves) };
-}
-
-export function loadIndex(dir: string): Index {
-  const meta = JSON.parse(fs.readFileSync(path.join(dir, "meta.json"), "utf8"));
-  const { shape, data } = readNpy(path.join(dir, "vectors.npy"));
-  const docs = fs
-    .readFileSync(path.join(dir, "docs.jsonl"), "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const d = JSON.parse(line);
-      return { kind: d.kind, episode_id: d.episode_id, start: d.start, end: d.end };
-    });
-  if (docs.length !== shape[0]) throw new Error(`${dir}: ${docs.length} docs but ${shape[0]} vectors`);
-  return { model: meta.model, dims: shape[1], vectors: data, docs };
+// The model's embeddings, or undefined if the database has none. Docs
+// without a section are left out, since a hit on them can't be shown.
+export function loadIndex(db: DatabaseSync, model: string): Index | undefined {
+  const known = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'embedding_models'").get();
+  const row = known && db.prepare("SELECT table_name FROM embedding_models WHERE model = ?").get(model);
+  if (!row) return undefined;
+  const from = `FROM ${row.table_name} WHERE section_id IS NOT NULL`;
+  const count = db.prepare(`SELECT count(*) AS n, max(length(vector)) AS bytes ${from}`).get() as {
+    n: number;
+    bytes: number;
+  };
+  const dims = count.bytes / 2; // float16
+  if (dims % 4) throw new Error(`${row.table_name}: ${dims} dimensions, not a multiple of 4`);
+  const index: Index = {
+    model,
+    dims,
+    vectors: new Float32Array(count.n * dims),
+    sections: new Int32Array(count.n),
+    channels: [],
+  };
+  const rows = db.prepare(`SELECT channel_id, section_id, vector ${from} ORDER BY id`).iterate() as Iterable<{
+    channel_id: string;
+    section_id: number;
+    vector: Uint8Array;
+  }>;
+  let i = 0;
+  for (const r of rows) {
+    const bytes = r.vector.slice(); // its own buffer, so float16 reads are aligned
+    index.vectors.set(new Float16Array(bytes.buffer, 0, dims), i * dims);
+    index.sections[i] = r.section_id;
+    index.channels.push(r.channel_id);
+    i++;
+  }
+  return index;
 }
 
 export async function localEmbedder(model: string, cacheDir: string): Promise<Embedder> {
@@ -97,49 +98,62 @@ async function embedQuery(embed: Embedder, query: string): Promise<Float32Array>
   return vector;
 }
 
-// Section ids, best first: a chapter hit becomes the section overlapping it
-// most, an episode hit the episode's first section. Given `episodes`, only
-// their docs are scored.
+// Each doc's row of `vectors` times q.
+function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: Float32Array): Float32Array {
+  const scores = new Float32Array(docs.length);
+  for (let n = 0; n < docs.length; n++) {
+    // four sums: about twice as fast as one
+    let a = 0, b = 0, c = 0, d = 0;
+    for (let row = docs[n] * dims, j = 0; j < dims; j += 4) {
+      a += vectors[row + j] * q[j];
+      b += vectors[row + j + 1] * q[j + 1];
+      c += vectors[row + j + 2] * q[j + 2];
+      d += vectors[row + j + 3] * q[j + 3];
+    }
+    scores[n] = a + b + c + d;
+  }
+  return scores;
+}
+
+// Positions in `scores` of the m highest, best first; all of them if m is
+// at least their number. Only those are sorted.
+function best(scores: Float32Array, m: number): Uint32Array {
+  const order = Uint32Array.from(scores.keys());
+  if (m < scores.length) {
+    const threshold = Float32Array.from(scores).sort()[scores.length - m];
+    return order.filter((n) => scores[n] >= threshold).sort((a, b) => scores[b] - scores[a]);
+  }
+  return order.sort((a, b) => scores[b] - scores[a]);
+}
+
+// Section ids, best first, each scored by its best doc. Given `channels`,
+// only their docs are scored.
 export async function semanticSearch(
-  db: DatabaseSync,
   index: Index,
   query: string,
   k: number,
   embed: Embedder,
-  episodes?: Set<string>,
+  channels?: Set<string>,
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);
-  const { vectors, dims, docs } = index;
-  let candidates = Uint32Array.from(docs.keys());
-  if (episodes) candidates = candidates.filter((i) => episodes.has(docs[i].episode_id));
-  const scores = new Float32Array(docs.length);
-  for (const i of candidates) {
-    let s = 0;
-    const row = i * dims;
-    for (let j = 0; j < dims; j++) s += vectors[row + j] * q[j];
-    scores[i] = s;
-  }
-  const order = candidates.sort((a, b) => scores[b] - scores[a]);
+  const { vectors, dims, sections } = index;
+  let docs = Uint32Array.from(sections.keys());
+  if (channels) docs = docs.filter((i) => channels.has(index.channels[i]));
+  const scores = dotProducts(vectors, dims, docs, q);
 
-  const chapterSection = db.prepare(
-    `SELECT id FROM sections
-     WHERE episode_id = ? AND start_time < ? AND end_time > ?
-     ORDER BY min(end_time, ?) - max(start_time, ?) DESC LIMIT 1`,
-  );
-  const firstSection = db.prepare("SELECT id FROM sections WHERE episode_id = ? ORDER BY idx LIMIT 1");
-
-  const ids: number[] = [];
-  const seen = new Set<number>();
-  for (const i of order) {
-    const d = docs[i];
-    const row =
-      d.kind === "chapter"
-        ? chapterSection.get(d.episode_id, d.end, d.start, d.end, d.start)
-        : firstSection.get(d.episode_id);
-    if (!row || seen.has(Number(row.id))) continue; // episode gone from the database
-    seen.add(Number(row.id));
-    ids.push(Number(row.id));
-    if (ids.length === k) break;
+  // Several docs can open the same section, so take the best few times k
+  // and widen until they cover k sections.
+  for (let m = k * 4; ; m *= 4) {
+    const top = best(scores, m);
+    const ids: number[] = [];
+    const seen = new Set<number>();
+    for (const n of top) {
+      const id = sections[docs[n]];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      if (ids.length === k) return ids;
+    }
+    if (top.length === docs.length) return ids;
   }
-  return ids;
 }
