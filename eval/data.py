@@ -9,6 +9,10 @@ you haven't graded, but only where they're trustworthy: the judge model is
 confident and the check model gives the same grade. The rest get the
 tiebreak model's grade, which is weaker: on such cases it matched about half
 of your grades. Your own grades always win.
+
+Sections of episodes without a transcript are graded on the episode's
+metadata ("input": "metadata"); those grades replace any made earlier from
+the section's empty text. They aren't calibrated against your grades.
 """
 
 import json
@@ -65,11 +69,18 @@ def load_judgments():
     return spans
 
 
+def model_lines():
+    """Model grades for the current PROMPT_VERSION. Metadata grades come last,
+    so where a span has one it replaces the earlier grade from empty text."""
+    lines = [j for j in read_jsonl(LLM_JUDGMENTS) if j["prompt_version"] == PROMPT_VERSION]
+    return sorted(lines, key=lambda j: j.get("input") == "metadata")
+
+
 def load_model_grades():
     """Accepted model grades, in the same shape as load_judgments()."""
     lines = {}
-    for j in read_jsonl(LLM_JUDGMENTS):
-        if j["prompt_version"] == PROMPT_VERSION and j["model"] in (JUDGE_MODEL, CHECK_MODEL):
+    for j in model_lines():
+        if j["model"] in (JUDGE_MODEL, CHECK_MODEL):
             lines[(j["model"], j["qid"], j["episode_id"], j["start"], j["end"])] = j
     spans = defaultdict(list)
     for (model, qid, episode_id, start, end), j in lines.items():
@@ -82,8 +93,8 @@ def load_model_grades():
 def load_tiebreak_grades():
     """The tiebreak model's grades, in the same shape as load_judgments()."""
     lines = {}
-    for j in read_jsonl(LLM_JUDGMENTS):
-        if j["prompt_version"] == PROMPT_VERSION and j["model"] == TIEBREAK_MODEL:
+    for j in model_lines():
+        if j["model"] == TIEBREAK_MODEL:
             lines[(j["qid"], j["episode_id"], j["start"], j["end"])] = j["grade"]
     spans = defaultdict(list)
     for (qid, episode_id, start, end), grade in lines.items():
@@ -101,8 +112,8 @@ def load_grades(unconfirmed=True):
     """
     grades = defaultdict(dict)
     if unconfirmed:
-        for j in read_jsonl(LLM_JUDGMENTS):
-            if j["model"] == JUDGE_MODEL and j["prompt_version"] == PROMPT_VERSION:
+        for j in model_lines():
+            if j["model"] == JUDGE_MODEL:
                 grades[j["qid"]][(j["episode_id"], j["start"], j["end"])] = (j["grade"], "jev")
         for (qid, episode_id), items in load_tiebreak_grades().items():
             for start, end, grade in items:

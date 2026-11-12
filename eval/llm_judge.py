@@ -9,6 +9,10 @@ judge      grades the rest of the pool (top N of every run) that you haven't,
            with the judge and check models; eval.data decides which of
            those grades are accepted.
 
+Sections of episodes without a transcript have no text, so the models are
+shown the episode's title and description and the section title instead,
+with their own instructions; those grades are marked "input": "metadata".
+
 Grades go to eval/llm_judgments.jsonl with the model and PROMPT_VERSION, and
 are reused on later runs. Bump PROMPT_VERSION (in eval.data) after changing
 the prompt so old grades aren't mixed in. Your own grades always take
@@ -39,7 +43,7 @@ from pathlib import Path
 
 from .data import (
     CHECK_MODEL, JUDGE_MODEL, LLM_JUDGMENTS, PROMPT_VERSION,
-    grade_of, load_judgments, load_model_grades, load_queries, load_runs, read_jsonl,
+    grade_of, load_judgments, load_model_grades, load_queries, load_runs, model_lines,
 )
 from .judge import pool
 
@@ -57,6 +61,18 @@ subject directly counts even if it covers only some of them. The speaker's \
 opinion doesn't matter; a skeptical or critical discussion of the subject is \
 still about it. Grading rules written in need take precedence."""
 
+METADATA_INSTRUCTIONS = """How well does the section of a podcast episode \
+described here serve someone who searched for query, whose intent is \
+described by need? The episode has no transcript, so all there is to go on \
+is episode_title, episode_description and section_title, which is a chapter \
+title, or the episode title if the episode has no chapters. Grade the section \
+as you would its transcript when these make clear what it covers, and lower \
+when they only hint at it. Judge against need, not whether the query words \
+appear. The topics listed in need are examples, not a checklist. The \
+speaker's opinion doesn't matter. Grading rules written in need take \
+precedence."""
+MAX_DESCRIPTION_CHARS = 3000
+
 LEVELS = [
     "Not relevant: the section does not serve the need, even if the query words appear in it.",
     "Partially relevant: the section touches the need only briefly or from the side, "
@@ -64,7 +80,8 @@ LEVELS = [
     "Highly relevant: a good part of the section, a minute or more, directly addresses the need.",
 ]
 
-CHAT_PROMPT = f"""{INSTRUCTIONS}
+def chat_prompt(instructions):
+    return f"""{instructions}
 
 Grades:
 0 = {LEVELS[0]}
@@ -72,6 +89,10 @@ Grades:
 2 = {LEVELS[2]}
 
 Reply with only a JSON object: {{"reason": "<one short sentence>", "grade": <0, 1 or 2>}}"""
+
+
+def instructions_for(state):
+    return INSTRUCTIONS if "section_text" in state else METADATA_INSTRUCTIONS
 
 
 def api_key():
@@ -100,7 +121,7 @@ def post(path, body, key, tries=4):
 
 def ask_decision(model, state, key):
     r = post("/alpha/decisions", {"model": model, "state": state, "questions": {
-        "relevance": {"type": "score", "instructions": INSTRUCTIONS, "criteria": LEVELS}}}, key)
+        "relevance": {"type": "score", "instructions": instructions_for(state), "criteria": LEVELS}}}, key)
     answer = r["answers"]["relevance"]
     probs = {int(k): v for k, v in answer["probabilities"].items()}
     return {"grade": max(probs, key=probs.get), "probs": probs,
@@ -110,7 +131,7 @@ def ask_decision(model, state, key):
 def ask_chat(model, state, key):
     r = post("/v1/chat/completions", {
         "model": model, "temperature": 0, "max_tokens": 4000,
-        "messages": [{"role": "system", "content": CHAT_PROMPT},
+        "messages": [{"role": "system", "content": chat_prompt(instructions_for(state))},
                      {"role": "user", "content": json.dumps(state, ensure_ascii=False)}],
     }, key)
     out = parse_reply(r["choices"][0]["message"]["content"] or "")
@@ -149,7 +170,7 @@ def wait_turn():
 def ask_claude_code(model, state, key, tries=3):
     claude = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
     name, _, effort = model.removeprefix("claude-code/").partition(":")
-    cmd = [claude, "-p", "--model", name, *(["--effort", effort] if effort else []), "--system-prompt", CHAT_PROMPT,
+    cmd = [claude, "-p", "--model", name, *(["--effort", effort] if effort else []), "--system-prompt", chat_prompt(instructions_for(state)),
            "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
     for attempt in range(tries):
         if limit_hit.is_set():
@@ -181,9 +202,11 @@ def ask(model, state, key):
 
 
 def section_for(conn, episode_id, start, end):
-    """The section covering most of a judged span."""
+    """The section covering most of a judged span: episode title, description
+    and transcript source, section title and text."""
     return conn.execute(
-        """SELECT e.title, s.title, s.text FROM sections s JOIN episodes e ON e.id = s.episode_id
+        """SELECT e.title, e.description, e.transcript_source, s.title, s.text
+           FROM sections s JOIN episodes e ON e.id = s.episode_id
            WHERE s.episode_id = ? AND s.start_time < ? AND s.end_time > ?
            ORDER BY min(s.end_time, ?) - max(s.start_time, ?) DESC LIMIT 1""",
         (episode_id, end, start, end, start),
@@ -193,8 +216,8 @@ def section_for(conn, episode_id, start, end):
 def cached(model):
     """{(qid, episode_id, start, end): line} for this model and prompt version."""
     out = {}
-    for j in read_jsonl(LLM_JUDGMENTS):
-        if j["model"] == model and j["prompt_version"] == PROMPT_VERSION:
+    for j in model_lines():
+        if j["model"] == model:
             if "probs" in j:  # JSON turns the int grade keys into strings
                 j["probs"] = {int(k): v for k, v in j["probs"].items()}
             out[(j["qid"], j["episode_id"], j["start"], j["end"])] = j
@@ -203,15 +226,22 @@ def cached(model):
 
 def grade_all(conn, model, todo, queries, key, workers=4):
     """Grade (qid, episode_id, start, end) spans not graded yet; return all grades."""
-    have = cached(model)
-    missing = [t for t in todo if t not in have]
-
     def state(span):
         qid, episode_id, start, end = span
-        episode_title, section_title, text = section_for(conn, episode_id, start, end)
+        episode_title, description, transcript, section_title, text = section_for(conn, episode_id, start, end)
         q = queries[qid]
+        if transcript is None:
+            return {"query": q["q"], "need": q["need"], "episode_title": episode_title,
+                    "episode_description": (description or "")[:MAX_DESCRIPTION_CHARS],
+                    "section_title": section_title}
         return {"query": q["q"], "need": q["need"], "episode_title": episode_title,
                 "section_title": section_title, "section_text": text}
+
+    have = cached(model)
+    states = {span: state(span) for span in todo}  # read the DB here, not in the threads
+    # a grade made before sections without a transcript were shown their metadata doesn't count
+    missing = [t for t in todo if t not in have
+               or ("section_text" not in states[t] and have[t].get("input") != "metadata")]
 
     def work(job):
         span, st = job
@@ -220,7 +250,7 @@ def grade_all(conn, model, todo, queries, key, workers=4):
         except Exception as err:
             return span, err
 
-    jobs = [(span, state(span)) for span in missing]  # read the DB here, not in the threads
+    jobs = [(span, states[span]) for span in missing]
     failed = 0
     with ThreadPoolExecutor(workers) as ex, LLM_JUDGMENTS.open("a", encoding="utf-8") as f:
         for n, (span, result) in enumerate(ex.map(work, jobs), 1):
@@ -230,7 +260,8 @@ def grade_all(conn, model, todo, queries, key, workers=4):
                     print(f"  failed {span}: {result}")
                 continue
             line = {"qid": span[0], "episode_id": span[1], "start": span[2], "end": span[3],
-                    "model": model, "prompt_version": PROMPT_VERSION, **result}
+                    "model": model, "prompt_version": PROMPT_VERSION,
+                    **({} if "section_text" in states[span] else {"input": "metadata"}), **result}
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
             f.flush()
             have[span] = line
