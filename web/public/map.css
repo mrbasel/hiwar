@@ -29,6 +29,7 @@
 }
 
 .panel header a { color: var(--signal); font-size: 0.875rem; }
+.panel header .theme-toggle { align-self: center; margin-inline-start: auto; margin-inline-end: 0.75rem; }
 
 .hint, .count, .meta {
   color: var(--muted);
@@ -101,8 +102,8 @@
   cursor: pointer;
 }
 
-.selected li button:hover, .clusters button:hover { background: #e4e8ed; }
-.clusters button[aria-pressed="true"] { background: #dce3f7; }
+.selected li button:hover, .clusters button:hover { background: var(--hover); }
+.clusters button[aria-pressed="true"] { background: var(--pressed); }
 
 .swatch {
   width: 0.65rem;
@@ -137,7 +138,7 @@
   position: absolute;
   pointer-events: none;
   max-width: 22rem;
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--surface);
   color: var(--ink);
   border-radius: 6px;
   padding: 0.45rem 0.65rem;

@@ -1,11 +1,23 @@
 :root {
-  --paper: #f2f4f6;
-  --surface: #ffffff;
-  --ink: #18202b;
-  --muted: #5d6876;
-  --rule: #d5dbe2;
-  --signal: #2342c8;
-  --mark: #ffe27a;
+  color-scheme: light dark;
+
+  --paper: light-dark(#f2f4f6, #10151c);
+  --surface: light-dark(#ffffff, #19202a);
+  --ink: light-dark(#18202b, #e3e8ee);
+  --muted: light-dark(#5d6876, #9aa6b4);
+  --rule: light-dark(#d5dbe2, #2c3542);
+  --signal: light-dark(#2342c8, #8ea2ff);
+  --mark: light-dark(#ffe27a, #6b5410);
+  --hover: light-dark(#e4e8ed, #232c38);
+  --pressed: light-dark(#dce3f7, #283458);
+  --error: light-dark(#b3261e, #f2b8b5);
+
+  /* The search bar stays dark in both themes */
+  --bar: light-dark(#18202b, #0a0e13);
+  --bar-muted: #c9d0da;
+  --bar-rule: #4a5462;
+  --field: light-dark(#ffffff, #232c38);
+  --on-signal: light-dark(#ffffff, #0a0e13);
 
   --ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
   --read: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
@@ -23,6 +35,9 @@ body {
 }
 
 a { color: inherit; }
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 :focus-visible {
   outline: 2px solid var(--signal);
@@ -42,7 +57,7 @@ mark {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--ink);
+  background: var(--bar);
   color: #fff;
   padding: 0.9rem 1rem;
 }
@@ -64,7 +79,7 @@ mark {
   padding: 0.55rem 0.8rem;
   border: 0;
   border-radius: 6px;
-  background: #fff;
+  background: var(--field);
   color: var(--ink);
 }
 
@@ -74,7 +89,7 @@ mark {
   border: 0;
   border-radius: 6px;
   background: var(--signal);
-  color: #fff;
+  color: var(--on-signal);
   cursor: pointer;
 }
 
@@ -91,7 +106,7 @@ mark {
   align-items: center;
   gap: 0.4rem;
   font-size: 0.875rem;
-  color: #c9d0da;
+  color: var(--bar-muted);
   cursor: pointer;
 }
 
@@ -109,9 +124,9 @@ mark {
 
 .picker summary {
   cursor: pointer;
-  color: #c9d0da;
+  color: var(--bar-muted);
   padding: 0.1rem 0.6rem;
-  border: 1px solid #4a5462;
+  border: 1px solid var(--bar-rule);
   border-radius: 999px;
 }
 
@@ -144,6 +159,8 @@ mark {
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--rule);
   border-radius: 4px;
+  background: var(--field);
+  color: var(--ink);
 }
 
 .panel-head button {
@@ -183,6 +200,34 @@ mark {
   font-variant-numeric: tabular-nums;
 }
 
+/* Theme toggle */
+
+.theme-toggle {
+  font: 1rem/1 var(--ui);
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-toggle:hover { color: var(--ink); border-color: var(--ink); }
+
+.bar .theme-toggle {
+  margin-inline-start: auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.9rem;
+  border-color: var(--bar-rule);
+  color: var(--bar-muted);
+}
+
+.bar .theme-toggle:hover { color: #fff; border-color: #fff; }
+
 /* Page body */
 
 main {
@@ -197,7 +242,7 @@ main {
   margin: 0.25rem 0 1rem;
 }
 
-.status.error { color: #b3261e; }
+.status.error { color: var(--error); }
 
 .intro h1 {
   font-size: 1.75rem;
@@ -270,8 +315,8 @@ main {
   border: 1px solid currentColor;
 }
 
-.badge.keyword { color: #6a4a00; background: #fff4d1; }
-.badge.semantic { color: var(--signal); background: #e8ecff; }
+.badge.keyword { color: light-dark(#6a4a00, #f0c75e); background: light-dark(#fff4d1, #3a2e0c); }
+.badge.semantic { color: var(--signal); background: light-dark(#e8ecff, #1e2748); }
 
 .section {
   border-top: 1px solid var(--rule);
