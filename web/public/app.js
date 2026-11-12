@@ -179,7 +179,10 @@ function renderEpisode({ episode, hits }) {
   const descToggle = node.querySelector(".desc-toggle");
   if (episode.description_html) {
     desc.innerHTML = episode.description_html;
-    descToggle.textContent = "اعرض الوصف";
+    // Without a transcript, the description is all there is to show.
+    desc.hidden = episode.has_transcript;
+    descToggle.textContent = desc.hidden ? "اعرض الوصف" : "أخفِ الوصف";
+    descToggle.setAttribute("aria-expanded", String(!desc.hidden));
     descToggle.addEventListener("click", () => {
       desc.hidden = !desc.hidden;
       descToggle.textContent = desc.hidden ? "اعرض الوصف" : "أخفِ الوصف";
@@ -196,6 +199,9 @@ function renderEpisode({ episode, hits }) {
       .filter((m) => via.has(m))
       .map((m) => el("span", { className: `badge ${m}`, textContent: BADGES[m] })),
   );
+  if (!episode.has_transcript) {
+    node.querySelector(".via").append(el("span", { className: "badge", textContent: "بدون نص" }));
+  }
 
   const sections = node.querySelector(".sections");
   sections.append(...hits.map(renderSection));
@@ -221,7 +227,9 @@ function renderSection(hit) {
         quote.innerHTML = `<span class="ctx">${m.before}</span> ${m.html} <span class="ctx">${m.after}</span>`;
         return el("div", { className: "moment" }, [timeLink(m.start, m.link), quote]);
       })
-    : [el("p", { className: "snippet", innerHTML: hit.snippet })];
+    : hit.snippet
+      ? [el("p", { className: "snippet", innerHTML: hit.snippet })]
+      : [];
 
   return el("div", { className: "section" }, [heading, ...body]);
 }

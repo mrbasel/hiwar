@@ -41,6 +41,7 @@ interface Hit {
   url: string;
   duration: number | null;
   description: string | null;
+  transcript_source: string | null;
   score: number;
 }
 
@@ -119,7 +120,7 @@ function placeholders(n: number): string {
 
 const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
   e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration,
-  e.description`;
+  e.description, e.transcript_source`;
 
 // Matching sections in the given channels. Bind the match, then the channel ids.
 function ftsFrom(shows: string[]): string {
@@ -331,6 +332,7 @@ function hydrate(db: DatabaseSync, hits: Hit[], parsed: ParsedQuery) {
         date: h.date,
         url: h.url,
         duration: h.duration,
+        has_transcript: h.transcript_source !== null,
         // one line break between paragraphs keeps long descriptions compact
         description_html: highlight((h.description ?? "").replace(/\s*\n\s*/g, "\n").trim(), parsed.terms),
       },
