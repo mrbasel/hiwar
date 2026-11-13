@@ -12,7 +12,7 @@ export function normalize(text: string): string {
   return out.toLowerCase();
 }
 
-// Normalized words, split roughly like FTS5's unicode61 tokenizer.
+// Split roughly like FTS5's unicode61 tokenizer.
 export function words(text: string): string[] {
   return normalize(text).match(/[\p{L}\p{N}]+/gu) ?? [];
 }

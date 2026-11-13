@@ -1,10 +1,7 @@
-// Semantic search over the episode and chapter embeddings that `pipeline.embed`
-// (Python) keeps in the database: every vector is held in memory and scored
-// against the query, and each hit becomes the section stored with it.
-// Queries are embedded locally or through OpenRouter.
+// Brute-force search over the embeddings `pipeline.embed` writes, all held in memory.
 
-import { DatabaseSync } from "node:sqlite";
 import { env, pipeline } from "@huggingface/transformers";
+import { db } from "../db/connection.js";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
 const TIMEOUT_MS = 5000;
@@ -14,7 +11,12 @@ const LOCAL_MODELS: Record<string, string> = { "baai/bge-m3": "Xenova/bge-m3" };
 
 export type Embedder = (query: string) => Promise<Float32Array>;
 
-// Recent query vectors, so paging keeps the same ranking. Oldest dropped first.
+export interface Semantic {
+  index: Index;
+  embed: Embedder;
+}
+
+// Recent query vectors, so paging keeps the same ranking.
 const queryCache = new Map<string, Float32Array>();
 
 export interface Index {
@@ -22,12 +24,11 @@ export interface Index {
   dims: number;
   vectors: Float32Array; // row-major, one unit-length row per doc
   sections: Int32Array; // the section each doc opens
-  channels: string[]; // each doc's channel id
+  channels: string[];
 }
 
-// The model's embeddings, or undefined if the database has none. Docs
-// without a section are left out, since a hit on them can't be shown.
-export function loadIndex(db: DatabaseSync, model: string): Index | undefined {
+// Docs without a section are left out, since a hit on them can't be shown.
+export function loadIndex(model: string): Index | undefined {
   const known = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'embedding_models'").get();
   const row = known && db.prepare("SELECT table_name FROM embedding_models WHERE model = ?").get(model);
   if (!row) return undefined;
@@ -98,7 +99,6 @@ async function embedQuery(embed: Embedder, query: string): Promise<Float32Array>
   return vector;
 }
 
-// Each doc's row of `vectors` times q.
 function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: Float32Array): Float32Array {
   const scores = new Float32Array(docs.length);
   for (let n = 0; n < docs.length; n++) {
@@ -115,8 +115,6 @@ function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: 
   return scores;
 }
 
-// Positions in `scores` of the m highest, best first; all of them if m is
-// at least their number. Only those are sorted.
 function best(scores: Float32Array, m: number): Uint32Array {
   const order = Uint32Array.from(scores.keys());
   if (m < scores.length) {
@@ -126,8 +124,6 @@ function best(scores: Float32Array, m: number): Uint32Array {
   return order.sort((a, b) => scores[b] - scores[a]);
 }
 
-// Section ids, best first, each scored by its best doc. Given `channels`,
-// only their docs are scored.
 export async function semanticSearch(
   index: Index,
   query: string,
