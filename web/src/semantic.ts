@@ -1,4 +1,4 @@
-// Semantic search over the episode and chapter embeddings that `search.embed`
+// Semantic search over the episode and chapter embeddings that `pipeline.embed`
 // (Python) keeps in the database: every vector is held in memory and scored
 // against the query, and each hit becomes the section stored with it.
 // Queries are embedded locally or through OpenRouter.

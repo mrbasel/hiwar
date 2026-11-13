@@ -1,6 +1,6 @@
 """Embed episode metadata for semantic search.
 
-    uv run python -m search.embed [--db PATH] [--model MODEL] [--limit N]
+    uv run python -m pipeline.embed [--db PATH] [--model MODEL] [--limit N]
 
 Two kinds of documents, both from the `episodes` table:
 

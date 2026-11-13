@@ -1,4 +1,4 @@
-// The episode map: every episode at its 2D position from `search.map`,
+// The episode map: every episode at its 2D position from `pipeline.map`,
 // coloured by cluster or channel, on a canvas that pans and zooms.
 
 const $ = (sel) => document.querySelector(sel);
@@ -33,7 +33,7 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-// Match search.map's normalisation, so "مقدمة" finds "مقدمه".
+// Match pipeline.map's normalisation, so "مقدمة" finds "مقدمه".
 function normalize(text) {
   return text
     .toLowerCase()

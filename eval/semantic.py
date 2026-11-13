@@ -1,4 +1,4 @@
-"""Semantic search over the documents `search.embed` keeps in the database.
+"""Semantic search over the documents `pipeline.embed` keeps in the database.
 
 Brute force: the query vector against every document vector, held in memory.
 Results are sections, like the other methods: each document is stored with
@@ -14,8 +14,8 @@ from functools import cache
 
 import numpy as np
 
-from .embed import out_dir
-from .openrouter import api_key, embed
+from pipeline.embed import out_dir
+from pipeline.openrouter import api_key, embed
 
 
 @cache

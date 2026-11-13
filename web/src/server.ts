@@ -9,7 +9,7 @@ const ENV_FILE = path.join(ROOT, ".env");
 if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 const DB_PATH = process.env.DB_PATH ?? path.join(ROOT, "podcasts.db");
-// Its embeddings are in the database, written by `search.embed`.
+// Its embeddings are in the database, written by `pipeline.embed`.
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "baai/bge-m3";
 // For map.json.
 const EMBEDDINGS_DIR = process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3");
@@ -87,7 +87,7 @@ app.get("/api/shows", (_req, res) => {
 app.get("/api/map", (_req, res) => {
   const file = path.join(EMBEDDINGS_DIR, "map.json");
   if (fs.existsSync(file)) res.sendFile(file);
-  else res.status(404).json({ error: "no map yet: run `uv run python -m search.map`" });
+  else res.status(404).json({ error: "no map yet: run `uv run python -m pipeline.map`" });
 });
 
 app.use(express.static(path.resolve(import.meta.dirname, "../public")));

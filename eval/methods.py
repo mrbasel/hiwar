@@ -8,7 +8,7 @@ METHODS so `eval.retrieve` runs them.
 import re
 
 from pipeline.normalize import normalize
-from search import semantic
+from . import semantic
 
 # Same as web/src/search.ts, so the baseline is what the site serves.
 HEADING_WEIGHT = 3

@@ -1,8 +1,8 @@
 """Lay the episode embeddings out on a 2D map, for the web app's /map page.
 
-    uv run python -m search.map [--db PATH] [--model MODEL]
+    uv run python -m pipeline.map [--db PATH] [--model MODEL]
 
-Takes the episode vectors `search.embed` keeps in the database (chapters are left out)
+Takes the episode vectors `pipeline.embed` keeps in the database (chapters are left out)
 and reduces them twice with UMAP: to 2D for drawing, and to 5D for HDBSCAN to
 find clusters in, which keeps the clusters from depending on how the 2D layout
 happened to squash things. Each cluster is labelled with the words most

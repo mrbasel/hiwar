@@ -24,6 +24,6 @@ no_arabic_subs.txt
 node_modules/
 web/dist/
 
-# Embeddings (built by search.embed) and the local query model
+# Embeddings (built by pipeline.embed) and the local query model
 embeddings/
 models/
