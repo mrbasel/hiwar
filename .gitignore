@@ -22,7 +22,9 @@ no_arabic_subs.txt
 
 # Web app
 node_modules/
-web/dist/
+services/api/dist/
+services/frontend/dist/
+services/frontend/.tanstack/
 
 # Embeddings (built by pipeline.embed) and the local query model
 embeddings/

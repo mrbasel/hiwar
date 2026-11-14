@@ -1,0 +1,70 @@
+@import "tailwindcss";
+/* Each file covers every script by unicode-range, so browsers fetch only the subsets a page uses. */
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/600.css";
+@import "@fontsource/noto-naskh-arabic/400.css";
+@import "@fontsource/noto-naskh-arabic/600.css";
+
+/* Colours follow color-scheme, which the theme toggle sets on <html>. */
+@theme {
+  --color-paper: light-dark(#f2f4f6, #10151c);
+  --color-surface: light-dark(#ffffff, #19202a);
+  --color-ink: light-dark(#18202b, #e3e8ee);
+  --color-muted: light-dark(#5d6876, #9aa6b4);
+  --color-rule: light-dark(#d5dbe2, #2c3542);
+  --color-signal: light-dark(#2342c8, #8ea2ff);
+  --color-mark: light-dark(#ffe27a, #6b5410);
+  --color-hover: light-dark(#e4e8ed, #232c38);
+  --color-pressed: light-dark(#dce3f7, #283458);
+  --color-error: light-dark(#b3261e, #f2b8b5);
+
+  /* The search bar stays dark in both themes */
+  --color-bar: light-dark(#18202b, #0a0e13);
+  --color-bar-muted: #c9d0da;
+  --color-bar-rule: #4a5462;
+  --color-field: light-dark(#ffffff, #232c38);
+  --color-on-signal: light-dark(#ffffff, #0a0e13);
+  --color-stage: #0f151d;
+
+  --color-keyword: light-dark(#6a4a00, #f0c75e);
+  --color-keyword-bg: light-dark(#fff4d1, #3a2e0c);
+  --color-semantic-bg: light-dark(#e8ecff, #1e2748);
+
+  --font-ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-read: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    position: relative;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font: 16px / 1.6 var(--font-ui);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
+
+  /* Highlights come from the API as <mark> in pre-escaped HTML. */
+  mark {
+    background: var(--color-mark);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+}

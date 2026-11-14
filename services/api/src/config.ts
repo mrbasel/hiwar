@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const ROOT = path.resolve(import.meta.dirname, "../..");
+const ROOT = path.resolve(import.meta.dirname, "../../..");
 const ENV_FILE = path.join(ROOT, ".env");
 if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
@@ -17,5 +17,6 @@ export const config = {
   openRouterKey: process.env.OPENROUTER_KEY,
   port: Number(process.env.PORT ?? 3000),
   host: process.env.HOST ?? "0.0.0.0",
-  publicDir: path.resolve(import.meta.dirname, "../public"),
+  // The frontend's build (../frontend, `pnpm build`), served alongside the API.
+  publicDir: process.env.PUBLIC_DIR ?? path.join(ROOT, "services/frontend/dist/client"),
 };

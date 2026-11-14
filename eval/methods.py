@@ -10,11 +10,11 @@ import re
 from pipeline.normalize import normalize
 from . import semantic
 
-# Same as web/src/db/queries.ts, so the baseline is what the site serves.
+# Same as services/api/src/db/queries.ts, so the baseline is what the site serves.
 HEADING_WEIGHT = 3
 TEXT_WEIGHT = 1
 
-WORD = re.compile(r"[^\W_]+")  # letters and digits, like web/src/normalize.ts words()
+WORD = re.compile(r"[^\W_]+")  # letters and digits, like services/api/src/normalize.ts words()
 
 
 def bm25(conn, query, k):
