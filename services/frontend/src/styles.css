@@ -113,7 +113,7 @@
   }
 
   /* Highlights come from the API as <mark> in pre-escaped HTML. Shown in
-     development only (<html data-dev>); elsewhere they read as plain text. */
+     dev mode only (<html data-dev>); elsewhere they read as plain text. */
   mark {
     background: none;
     color: inherit;

@@ -4,6 +4,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { createRootRouteWithContext, HeadContent, Link, Outlet, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { ReactNode } from "react";
+import { devModeScript, useDevMode } from "#lib/devMode";
 import { DEV } from "#lib/env";
 import { themeScript } from "#lib/theme";
 import styles from "#styles.css?url";
@@ -16,7 +17,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "بحث في البودكاست" },
     ],
     links: [{ rel: "stylesheet", href: styles }],
-    scripts: [{ children: themeScript }],
+    scripts: [{ children: themeScript }, ...(DEV ? [{ children: devModeScript }] : [])],
   }),
   component: Root,
   notFoundComponent: NotFound,
@@ -38,8 +39,9 @@ function Root() {
 }
 
 function Document({ children }: { children: ReactNode }) {
+  const [devMode] = useDevMode();
   return (
-    <html lang="ar" dir="rtl" data-dev={DEV || undefined} suppressHydrationWarning>
+    <html lang="ar" dir="rtl" data-dev={devMode || undefined} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

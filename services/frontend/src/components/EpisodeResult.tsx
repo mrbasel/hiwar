@@ -5,7 +5,7 @@ import type { Episode, Moment, SearchHit } from "#api/search";
 import { buttonClass } from "#components/ui/Button";
 import { Tag } from "#components/ui/Tag";
 import { Timestamp } from "#components/ui/Timestamp";
-import { DEV } from "#lib/env";
+import { useDevMode } from "#lib/devMode";
 import { arabic, clock, cn } from "#lib/format";
 
 const MATCH_LABEL = { keyword: "تطابق لفظي", semantic: "تطابق في المعنى" } as const;
@@ -16,6 +16,7 @@ const momentHtml = (m: Moment) =>
   `<span class="ctx">${m.before}</span> ${m.html} <span class="ctx">${m.after}</span>`;
 
 export function EpisodeResult({ episode, hits }: { episode: Episode; hits: SearchHit[] }) {
+  const [devMode] = useDevMode();
   const via = new Set(hits.flatMap((h) => h.matched_by ?? []));
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(!episode.has_transcript);
@@ -55,7 +56,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {(["keyword", "semantic"] as const)
-              .filter((m) => DEV && via.has(m))
+              .filter((m) => devMode && via.has(m))
               .map((m) => (
                 <Tag key={m} tone={m === "semantic" ? "accent" : "plain"}>
                   {MATCH_LABEL[m]}
@@ -84,7 +85,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
             </Collapsible.Panel>
           </Collapsible.Root>
         )}
-        {DEV && episode.description_html && (
+        {devMode && episode.description_html && (
           <Collapsible.Root open={descOpen} onOpenChange={setDescOpen} className="contents">
             <Collapsible.Trigger className={toggleClass}>
               {descOpen ? "أخفِ الوصف" : "اعرض الوصف"}

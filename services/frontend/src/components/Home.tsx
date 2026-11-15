@@ -2,23 +2,26 @@ import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useState } from "react";
 import type { SearchParams } from "#api/search";
+import { DevModeToggle } from "#components/DevModeToggle";
 import { Suggestions } from "#components/Suggestions";
 import { ThemeToggle } from "#components/ThemeToggle";
 import { TextField } from "#components/ui/TextField";
-import { DEV } from "#lib/env";
+import { useDevMode } from "#lib/devMode";
 
 export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p: SearchParams) => void }) {
   const [text, setText] = useState("");
+  const [devMode] = useDevMode();
   const set = (changes: Partial<SearchParams>) => onSearch({ ...params, page: 1, ...changes });
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="flex items-center justify-end gap-2 px-4 py-3 text-sm">
-        {DEV && (
+        {devMode && (
           <Link to="/map" className="rounded-control px-2 py-1 text-muted no-underline hover:text-ink">
             خريطة الحلقات
           </Link>
         )}
+        <DevModeToggle />
         <ThemeToggle />
       </header>
 

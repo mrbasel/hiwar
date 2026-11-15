@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Mode, SearchParams } from "#api/search";
+import { DevModeToggle } from "#components/DevModeToggle";
 import { ShowPicker } from "#components/ShowPicker";
 import { ThemeToggle } from "#components/ThemeToggle";
 import { Segment, Segmented } from "#components/ui/Radio";
@@ -58,7 +59,10 @@ export function SearchBar({
             </button>
           </form>
         </search>
-        <ThemeToggle className="ms-auto" />
+        <div className="ms-auto flex">
+          <DevModeToggle />
+          <ThemeToggle />
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 py-3 sm:ps-28">
         <Segmented
