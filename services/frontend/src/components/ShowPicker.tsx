@@ -1,10 +1,13 @@
 import { Checkbox } from "@base-ui/react/checkbox";
 import { CheckboxGroup } from "@base-ui/react/checkbox-group";
-import { Input } from "@base-ui/react/input";
 import { Popover } from "@base-ui/react/popover";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useShows } from "#api/shows";
+import { Button } from "#components/ui/Button";
+import { chipClass } from "#components/ui/Chip";
+import { panelClass } from "#components/ui/panel";
+import { TextField } from "#components/ui/TextField";
 import { arabic, cn, fold } from "#lib/format";
 
 // Picks the channels to search in; none picked means all of them.
@@ -25,46 +28,47 @@ export function ShowPicker({ value, onChange }: { value: string[]; onChange: (id
 
   return (
     <Popover.Root>
-      <Popover.Trigger
-        className={cn(
-          "cursor-pointer rounded-full border border-bar-rule px-2.5 py-0.5 text-sm text-bar-muted hover:border-white hover:text-white data-popup-open:border-white data-popup-open:text-white",
-          value.length > 0 && "border-white text-white",
-        )}
-      >
-        {label}
-      </Popover.Trigger>
+      <Popover.Trigger className={chipClass(value.length > 0)}>{label}</Popover.Trigger>
       <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={6} className="z-10">
-          <Popover.Popup className="w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-rule bg-surface text-sm text-ink shadow-[0_8px_24px_rgb(0_0_0/0.18)] outline-none transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
+        {/* Always below the trigger, shortening the list to fit rather than flipping over the page above. */}
+        <Popover.Positioner
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          collisionAvoidance={{ side: "none" }}
+          className="z-10"
+        >
+          <Popover.Popup
+            className={cn(
+              panelClass,
+              "flex max-h-[calc(var(--available-height)-1rem)] w-[min(22rem,calc(100vw-2rem))] flex-col",
+            )}
+          >
             <div className="flex gap-1.5 border-b border-rule p-2">
-              <Input
+              <TextField
                 type="search"
                 value={filter}
                 onValueChange={setFilter}
                 placeholder="ابحث عن قناة…"
                 autoComplete="off"
                 aria-label="Filter channels"
-                className="min-w-0 flex-1 rounded border border-rule bg-field px-2 py-1 text-[0.9rem]"
+                className="h-9 flex-1 text-sm"
               />
-              <button
-                type="button"
-                onClick={() => value.length && onChange([])}
-                className="cursor-pointer rounded border border-rule px-2.5 text-[0.8rem] font-medium text-signal"
-              >
+              <Button size="sm" className="h-9" onClick={() => value.length && onChange([])}>
                 كل القنوات
-              </button>
+              </Button>
             </div>
             <CheckboxGroup
               value={value}
               onValueChange={onChange}
               aria-label="Channels"
-              className="max-h-80 overflow-y-auto py-1"
+              className="max-h-80 min-h-0 overflow-y-auto py-1"
             >
               {visible.map((show) => (
                 // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control
                 <label
                   key={show.id}
-                  className="flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-paper"
+                  className="flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-sunken"
                 >
                   <Checkbox.Root
                     value={show.id}

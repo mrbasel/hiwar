@@ -1,38 +1,85 @@
 @import "tailwindcss";
 /* Each file covers every script by unicode-range, so browsers fetch only the subsets a page uses. */
-@import "@fontsource/ibm-plex-sans-arabic/400.css";
-@import "@fontsource/ibm-plex-sans-arabic/500.css";
-@import "@fontsource/ibm-plex-sans-arabic/600.css";
-@import "@fontsource/noto-naskh-arabic/400.css";
-@import "@fontsource/noto-naskh-arabic/600.css";
+@import "@fontsource-variable/readex-pro/wght.css";
+@import "@fontsource-variable/markazi-text/wght.css";
 
-/* Colours follow color-scheme, which the theme toggle sets on <html>. */
 @theme {
-  --color-paper: light-dark(#f2f4f6, #10151c);
-  --color-surface: light-dark(#ffffff, #19202a);
-  --color-ink: light-dark(#18202b, #e3e8ee);
-  --color-muted: light-dark(#5d6876, #9aa6b4);
-  --color-rule: light-dark(#d5dbe2, #2c3542);
-  --color-signal: light-dark(#2342c8, #8ea2ff);
-  --color-mark: light-dark(#ffe27a, #6b5410);
-  --color-hover: light-dark(#e4e8ed, #232c38);
-  --color-pressed: light-dark(#dce3f7, #283458);
+  /* Neutral throughout: a light ground with black text, or #18181a with near-white text. */
+  --color-paper: light-dark(#fafafa, #18181a);
+  --color-surface: light-dark(#ffffff, #222225);
+  --color-sunken: light-dark(#f0f0f0, #121214);
+
+  --color-ink: light-dark(#000000, #ededed);
+  --color-muted: light-dark(#5c5c5c, #a1a1a6);
+  --color-faint: light-dark(#8f8f8f, #6e6e73);
+  --color-rule: light-dark(#e2e2e2, #2e2e32);
+
+  /* What can be acted on is drawn in the ink colour itself. */
+  --color-accent: light-dark(#000000, #ededed);
+  --color-accent-wash: light-dark(#ececec, #2c2c30);
+  --color-on-accent: light-dark(#ffffff, #18181a);
+
+  /* The one colour in the interface: the words a search found. */
+  --color-highlight: light-dark(#ffe066, #e6c35c);
+  --color-on-highlight: #000000;
+
   --color-error: light-dark(#b3261e, #f2b8b5);
+  --color-error-wash: light-dark(#fbe9e7, #3a2225);
 
-  /* The search bar stays dark in both themes */
-  --color-bar: light-dark(#18202b, #0a0e13);
-  --color-bar-muted: #c9d0da;
-  --color-bar-rule: #4a5462;
-  --color-field: light-dark(#ffffff, #232c38);
-  --color-on-signal: light-dark(#ffffff, #0a0e13);
-  --color-stage: #0f151d;
+  /* Fixed dark ground for the episode map's canvas, in both themes. */
+  --color-stage: #18181a;
 
-  --color-keyword: light-dark(#6a4a00, #f0c75e);
-  --color-keyword-bg: light-dark(#fff4d1, #3a2e0c);
-  --color-semantic-bg: light-dark(#e8ecff, #1e2748);
+  /* Aliases the current pages still use; remove as each page moves over. */
+  --color-signal: var(--color-accent);
+  --color-mark: var(--color-highlight);
+  --color-hover: var(--color-sunken);
+  --color-pressed: var(--color-accent-wash);
+  --color-field: var(--color-surface);
+  --color-on-signal: var(--color-on-accent);
 
-  --font-ui: "IBM Plex Sans Arabic", system-ui, sans-serif;
-  --font-read: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+  /* Readex Pro runs the interface; Markazi Text is for reading what was said. */
+  --font-ui: "Readex Pro Variable", system-ui, sans-serif;
+  --font-read: "Markazi Text Variable", "Readex Pro Variable", serif;
+
+  /*
+   * Type scale: a minor third (1.2) from 16px. Arabic sits lower and taller
+   * than Latin, so line heights run looser than the Tailwind defaults.
+   * Markazi has a small eye, so reading text gets its own larger steps.
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.5;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.6;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.65;
+  --text-base: 1rem;
+  --text-base--line-height: 1.7;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.4375rem;
+  --text-xl--line-height: 1.45;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.35;
+  --text-3xl: 2.125rem;
+  --text-3xl--line-height: 1.25;
+  --text-read: 1.5rem;
+  --text-read--line-height: 1.65;
+  --text-read-lg: 1.875rem;
+  --text-read-lg--line-height: 1.5;
+
+  /* Radius grows with the size of the thing: marks, controls, panels. */
+  --radius-mark: 2px;
+  --radius-control: 6px;
+  --radius-panel: 12px;
+
+  /* One shadow, for things that float above the page. */
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.08), 0 12px 32px -8px rgb(0 0 0 / 0.28);
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* The measure for reading columns. */
+  --container-read: 42rem;
+  --container-page: 60rem;
 }
 
 @layer base {
@@ -52,19 +99,36 @@
     position: relative;
     background: var(--color-paper);
     color: var(--color-ink);
-    font: 16px / 1.6 var(--font-ui);
+    font: 400 var(--text-base) / var(--text-base--line-height) var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent-wash);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-signal);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
   /* Highlights come from the API as <mark> in pre-escaped HTML. */
   mark {
-    background: var(--color-mark);
-    color: inherit;
-    border-radius: 2px;
-    padding: 0 1px;
+    background: var(--color-highlight);
+    color: var(--color-on-highlight);
+    border-radius: var(--radius-mark);
+    padding: 0 0.12em;
+    box-decoration-break: clone;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      /* biome-ignore lint/complexity/noImportantStyles: has to beat utilities, which sit in a later layer */
+      transition-duration: 0s !important;
+      /* biome-ignore lint/complexity/noImportantStyles: as above */
+      animation-duration: 0s !important;
+    }
   }
 }

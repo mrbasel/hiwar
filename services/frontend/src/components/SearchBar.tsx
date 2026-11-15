@@ -1,13 +1,13 @@
-import { Checkbox } from "@base-ui/react/checkbox";
-import { Input } from "@base-ui/react/input";
-import { Check } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { SearchParams } from "#api/search";
-import { ShowPicker } from "./ShowPicker";
-import { ThemeToggle } from "./ThemeToggle";
+import type { Mode, SearchParams } from "#api/search";
+import { ShowPicker } from "#components/ShowPicker";
+import { ThemeToggle } from "#components/ThemeToggle";
+import { Segment, Segmented } from "#components/ui/Radio";
+import { TextField } from "#components/ui/TextField";
 
-// The sticky search bar. Submitting, or changing an option, searches for
-// whatever is in the box, even if it hasn't been submitted yet.
+// Changing an option searches for whatever is in the box, even if it hasn't been submitted.
 export function SearchBar({
   params,
   onSearch,
@@ -16,58 +16,62 @@ export function SearchBar({
   onSearch: (p: SearchParams) => void;
 }) {
   const [text, setText] = useState(params.q);
-  // Follow the URL when it changes underneath, e.g. on back and forward.
+  // Follow the URL on back and forward.
   useEffect(() => setText(params.q), [params.q]);
 
-  const search = (changes: Partial<SearchParams>) =>
-    onSearch({ ...params, q: text.trim(), page: 1, ...changes });
+  const search = (changes: Partial<SearchParams> = {}) =>
+    onSearch({ ...params, q: text.trim() || params.q, page: 1, ...changes });
 
   return (
-    <header className="sticky top-0 z-2 bg-bar px-4 py-3.5 text-white">
-      <search className="mx-auto block max-w-184">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            search({});
-          }}
+    <header className="border-b border-rule px-4 pt-5 sm:px-8">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Link
+          to="/"
+          aria-label="راوي: الصفحة الرئيسية"
+          className="shrink-0 text-3xl font-bold text-ink no-underline sm:w-24"
         >
-          <div className="flex gap-2">
-            <Input
+          راوي
+        </Link>
+        <search className="max-w-2xl flex-1">
+          <form
+            className="relative"
+            onSubmit={(e) => {
+              e.preventDefault();
+              search();
+            }}
+          >
+            <TextField
+              variant="query"
               type="search"
               value={text}
               onValueChange={setText}
-              placeholder="ابحث في كل الحلقات…"
-              autoComplete="off"
-              autoFocus
-              aria-label="Search"
-              className="min-w-0 flex-1 rounded-md bg-field px-3 py-2 text-xl font-medium text-ink"
+              placeholder="ابحث في كل ما قيل…"
+              aria-label="ابحث"
+              className="h-12 ps-5 pe-13 text-lg"
             />
             <button
               type="submit"
-              className="cursor-pointer rounded-md bg-signal px-5 font-semibold text-on-signal"
+              aria-label="ابحث"
+              className="absolute inset-y-0 end-1.5 my-auto flex size-10 cursor-pointer items-center justify-center rounded-full text-muted transition-colors duration-150 hover:bg-sunken hover:text-ink"
             >
-              ابحث
+              <Search className="size-5" />
             </button>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
-            {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control */}
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-bar-muted">
-              <Checkbox.Root
-                checked={params.mode === "keyword"}
-                onCheckedChange={(checked) => search({ mode: checked ? "keyword" : "hybrid" })}
-                className="flex size-4 shrink-0 items-center justify-center rounded-[3px] border border-bar-muted bg-field text-on-signal data-checked:border-signal data-checked:bg-signal"
-              >
-                <Checkbox.Indicator className="flex data-unchecked:hidden">
-                  <Check className="size-3" strokeWidth={3} />
-                </Checkbox.Indicator>
-              </Checkbox.Root>
-              بحث بالكلمات فقط
-            </label>
-            <ShowPicker value={params.shows} onChange={(shows) => search({ shows })} />
-            <ThemeToggle className="ms-auto size-7 border-bar-rule text-sm text-bar-muted hover:border-white hover:text-white" />
-          </div>
-        </form>
-      </search>
+          </form>
+        </search>
+        <ThemeToggle className="ms-auto" />
+      </div>
+      <div className="flex flex-wrap items-center gap-3 py-3 sm:ps-28">
+        <Segmented
+          value={params.mode}
+          onValueChange={(mode) => search({ mode: mode as Mode })}
+          aria-label="نوع البحث"
+          className="whitespace-nowrap"
+        >
+          <Segment value="hybrid">بالمعنى والكلمات</Segment>
+          <Segment value="keyword">بالكلمات فقط</Segment>
+        </Segmented>
+        <ShowPicker value={params.shows} onChange={(shows) => search({ shows })} />
+      </div>
     </header>
   );
 }

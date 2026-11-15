@@ -255,7 +255,7 @@ export class MapEngine {
 
     for (const [p, colour] of [
       [this.hovered, "#fff"],
-      [this.selected, "#ffe27a"],
+      [this.selected, "#ffe066"],
     ] as const) {
       if (!p) continue;
       const [x, y] = this.toScreen(p);
@@ -270,7 +270,7 @@ export class MapEngine {
   // Biggest clusters first; skip any label that would overlap one already drawn.
   private drawLabels(w: number, h: number) {
     const { ctx } = this;
-    ctx.font = "600 13px 'IBM Plex Sans Arabic', sans-serif";
+    ctx.font = "600 13px 'Readex Pro Variable', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";

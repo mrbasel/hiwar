@@ -1,6 +1,7 @@
-import { createFileRoute, Link, stripSearchParams } from "@tanstack/react-router";
+import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import { z } from "zod";
 import type { SearchParams } from "#api/search";
+import { Home } from "#components/Home";
 import { SearchBar } from "#components/SearchBar";
 import { SearchResults } from "#components/SearchResults";
 
@@ -26,46 +27,20 @@ export const Route = createFileRoute("/")({
   component: SearchPage,
 });
 
-const EXAMPLES = ["الحرية المالية", "سوق العقار", "تربية الأطفال"];
-
 function SearchPage() {
   const params = Route.useSearch();
   const navigate = Route.useNavigate();
+  const onSearch = (p: SearchParams) => navigate({ search: p });
 
+  if (!params.q) return <Home params={params} onSearch={onSearch} />;
   return (
     <>
-      <SearchBar params={params} onSearch={(p) => navigate({ search: p })} />
-      <main className="mx-auto max-w-184 px-4 pt-4 pb-16">
-        {params.q ? <SearchResults params={params} /> : <Intro />}
+      <SearchBar params={params} onSearch={onSearch} />
+      <main className="px-4 pb-20 sm:px-8 sm:ps-36">
+        <div className="max-w-3xl">
+          <SearchResults params={params} />
+        </div>
       </main>
     </>
-  );
-}
-
-function Intro() {
-  return (
-    <section>
-      <h1 className="mt-8 mb-2 text-[1.75rem] leading-tight font-semibold">
-        ابحث في أكثر من ١٠ آلاف ساعة من حلقات البودكاست
-      </h1>
-      <div className="max-w-xl space-y-4 text-muted">
-        <p>تظهر النتائج مع التوقيت داخل الحلقة، اضغط عليه لتفتح المقطع على يوتيوب.</p>
-        <p>
-          جرّب:
-          {EXAMPLES.map((q) => (
-            <Link key={q} to="/" search={{ q }} className="ms-2.5 text-signal underline">
-              {q}
-            </Link>
-          ))}
-        </p>
-        <p>
-          أو تصفّح{" "}
-          <Link to="/map" className="text-signal underline">
-            خريطة الحلقات
-          </Link>{" "}
-          لترى كيف تتجمّع المواضيع.
-        </p>
-      </div>
-    </section>
   );
 }
