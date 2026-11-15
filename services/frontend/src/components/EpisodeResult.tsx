@@ -62,7 +62,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
                   {MATCH_LABEL[m]}
                 </Tag>
               ))}
-            {!episode.has_transcript && <Tag tone="warn">بدون نص</Tag>}
+            {devMode && !episode.has_transcript && <Tag tone="warn">بدون نص</Tag>}
           </div>
         </div>
 
