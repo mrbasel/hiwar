@@ -6,6 +6,7 @@ const ENV_FILE = path.join(ROOT, ".env");
 if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 export const config = {
+  dev: process.env.NODE_ENV === "development",
   dbPath: process.env.DB_PATH ?? path.join(ROOT, "podcasts.db"),
   embeddingModel: process.env.EMBEDDING_MODEL ?? "baai/bge-m3",
   // For map.json.

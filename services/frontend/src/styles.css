@@ -112,8 +112,14 @@
     outline-offset: 2px;
   }
 
-  /* Highlights come from the API as <mark> in pre-escaped HTML. */
+  /* Highlights come from the API as <mark> in pre-escaped HTML. Shown in
+     development only (<html data-dev>); elsewhere they read as plain text. */
   mark {
+    background: none;
+    color: inherit;
+  }
+
+  [data-dev] mark {
     background: var(--color-highlight);
     color: var(--color-on-highlight);
     border-radius: var(--radius-mark);

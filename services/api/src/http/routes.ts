@@ -31,7 +31,8 @@ api.get("/shows", (_req, res) => {
   res.json(listShows());
 });
 
-api.get("/map", (_req, res) => {
+api.get("/map", (_req, res, next) => {
+  if (!config.dev) return next();
   const file = path.join(config.embeddingsDir, "map.json");
   if (fs.existsSync(file)) res.sendFile(file);
   else res.status(404).json({ error: "no map yet: run `uv run python -m pipeline.map`" });

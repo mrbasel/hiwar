@@ -2,10 +2,11 @@ import { Input } from "@base-ui/react/input";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Toggle } from "@base-ui/react/toggle";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useEpisodeMap } from "#api/map";
 import { ThemeToggle } from "#components/ThemeToggle";
+import { DEV } from "#lib/env";
 import { arabic, fold } from "#lib/format";
 import {
   type ColourBy,
@@ -18,7 +19,11 @@ import {
   prepare,
 } from "#map/engine";
 
+// Development only, like the API's /map.
 export const Route = createFileRoute("/map")({
+  beforeLoad: () => {
+    if (!DEV) throw notFound();
+  },
   head: () => ({ meta: [{ title: "خريطة الحلقات" }] }),
   component: MapPage,
 });

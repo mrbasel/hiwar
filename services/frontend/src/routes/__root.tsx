@@ -4,6 +4,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { createRootRouteWithContext, HeadContent, Link, Outlet, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { ReactNode } from "react";
+import { DEV } from "#lib/env";
 import { themeScript } from "#lib/theme";
 import styles from "#styles.css?url";
 
@@ -38,7 +39,7 @@ function Root() {
 
 function Document({ children }: { children: ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" data-dev={DEV || undefined} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

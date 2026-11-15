@@ -5,6 +5,7 @@ import type { SearchParams } from "#api/search";
 import { Suggestions } from "#components/Suggestions";
 import { ThemeToggle } from "#components/ThemeToggle";
 import { TextField } from "#components/ui/TextField";
+import { DEV } from "#lib/env";
 
 export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p: SearchParams) => void }) {
   const [text, setText] = useState("");
@@ -13,9 +14,11 @@ export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p:
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="flex items-center justify-end gap-2 px-4 py-3 text-sm">
-        <Link to="/map" className="rounded-control px-2 py-1 text-muted no-underline hover:text-ink">
-          خريطة الحلقات
-        </Link>
+        {DEV && (
+          <Link to="/map" className="rounded-control px-2 py-1 text-muted no-underline hover:text-ink">
+            خريطة الحلقات
+          </Link>
+        )}
         <ThemeToggle />
       </header>
 
