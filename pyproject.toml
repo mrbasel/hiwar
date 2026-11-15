@@ -6,6 +6,7 @@ dependencies = [
     "numpy>=2.5.4",
     "scikit-learn>=1.9.1",
     "umap-learn>=0.5.12",
+    "usearch>=2.26.5",
     "yt-dlp[default]>=2026.10.26",
 ]
 

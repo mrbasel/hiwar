@@ -1,9 +1,10 @@
 """Semantic search over the documents `pipeline.embed` keeps in the database.
 
-Brute force: the query vector against every document vector, held in memory.
-Results are sections, like the other methods: each document is stored with
-the section a hit on it opens, a chapter's the section that overlaps it most
-and an episode's its first section.
+Brute force: the query vector against every document vector, held in memory;
+or, with hnsw=True, the documents the HNSW index (pipeline.hnsw) finds, as the
+site does for searches over every channel. Results are sections, like the
+other methods: each document is stored with the section a hit on it opens, a
+chapter's the section that overlaps it most and an episode's its first section.
 
 Query vectors are cached in embeddings/<model>/queries.jsonl, keyed by the
 exact query text, so repeated runs over the eval queries make no API calls.
@@ -14,18 +15,31 @@ from functools import cache
 
 import numpy as np
 
-from pipeline.embed import out_dir
+from pipeline import hnsw as hnsw_index
+from pipeline.embed import index_path, out_dir
 from pipeline.openrouter import api_key, embed
+
+HNSW_CANDIDATES = 1600  # as in services/api/src/search/semantic.ts
 
 
 @cache
 def load(conn, model):
-    """Vectors, kinds and section ids of the model's documents with a section."""
+    """Vectors, kinds, section ids and table ids of the model's documents with a section."""
     table = conn.execute("SELECT table_name FROM embedding_models WHERE model = ?", (model,)).fetchone()[0]
     rows = conn.execute(
-        f"SELECT vector, kind, section_id FROM {table} WHERE section_id IS NOT NULL ORDER BY id").fetchall()
+        f"SELECT vector, kind, section_id, id FROM {table} WHERE section_id IS NOT NULL ORDER BY id").fetchall()
     vectors = np.frombuffer(b"".join(r[0] for r in rows), dtype="<f2").reshape(len(rows), -1)
-    return vectors.astype(np.float32), [r[1] for r in rows], [r[2] for r in rows]
+    positions = {r[3]: i for i, r in enumerate(rows)}
+    return vectors.astype(np.float32), [r[1] for r in rows], [r[2] for r in rows], positions
+
+
+@cache
+def load_hnsw(conn, model):
+    table = conn.execute("SELECT table_name FROM embedding_models WHERE model = ?", (model,)).fetchone()[0]
+    index = hnsw_index.load(index_path(model))
+    if not hnsw_index.is_current(index, hnsw_index.table_ids(conn, table)):
+        raise SystemExit(f"{index_path(model)} is missing or out of date; run pipeline.embed")
+    return index
 
 
 @cache
@@ -47,11 +61,18 @@ def embed_query(model, query):
     return cached[query]
 
 
-def search(conn, query, k, model):
-    vectors, kinds, sections = load(conn, model)
-    scores = vectors @ embed_query(model, query)
+def search(conn, query, k, model, hnsw=False):
+    vectors, kinds, sections, positions = load(conn, model)
+    q = embed_query(model, query)
+    if hnsw:
+        keys = load_hnsw(conn, model).search(q, HNSW_CANDIDATES).keys
+        order = [positions[key] for key in keys.tolist() if key in positions]
+        scores = dict(zip(order, (vectors[order] @ q).tolist()))
+    else:
+        scores = vectors @ q
+        order = np.argsort(-scores)
     results, seen = [], set()
-    for i in np.argsort(-scores):
+    for i in order:
         if sections[i] in seen:
             continue
         seen.add(sections[i])
