@@ -41,7 +41,6 @@ export interface EpisodeResponse {
   sections: TranscriptSection[];
 }
 
-/** What `GET /episodes/:id/recommendations` will answer with. */
 export interface RecommendedEpisode {
   id: string;
   title: string | null;

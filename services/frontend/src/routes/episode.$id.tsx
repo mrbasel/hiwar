@@ -64,7 +64,7 @@ function Page({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
     <>
       <SearchBar params={NEW_SEARCH} onSearch={(search) => navigate({ to: "/", search })} />
       <main className="px-4 pt-8 pb-20 sm:px-8 sm:ps-36">
-        <div className="grid max-w-6xl gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="grid max-w-7xl gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
           <article className="max-w-3xl min-w-0">{children}</article>
           {aside && <aside className="lg:pt-1">{aside}</aside>}
         </div>

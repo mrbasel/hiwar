@@ -2,8 +2,9 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config.js";
-import { listShows } from "../db/queries.js";
+import { episodeById, listShows } from "../db/queries.js";
 import { presentEpisode } from "../episodes/present.js";
+import { recommendations } from "../episodes/recommend.js";
 import { QueryError, search, type SearchParams } from "../search/service.js";
 
 function str(v: unknown): string | undefined {
@@ -36,6 +37,14 @@ api.get("/episodes/:id", (req, res) => {
   const episode = presentEpisode(req.params.id);
   if (episode) res.json(episode);
   else res.status(404).json({ error: "لا توجد حلقة بهذا المعرّف." });
+});
+
+api.get("/episodes/:id/recommendations", (req, res) => {
+  if (!episodeById(req.params.id)) {
+    res.status(404).json({ error: "لا توجد حلقة بهذا المعرّف." });
+    return;
+  }
+  res.json(recommendations(req.params.id));
 });
 
 api.get("/map", (_req, res, next) => {

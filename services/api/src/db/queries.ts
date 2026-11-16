@@ -182,6 +182,24 @@ export function episodeById(id: string): EpisodeRow | undefined {
     .get(id) as unknown as EpisodeRow | undefined;
 }
 
+export interface EpisodeSummary {
+  id: string;
+  title: string | null;
+  show: string;
+  date: string;
+  duration: number | null;
+  url: string;
+}
+
+export function episodesByIds(ids: string[]): EpisodeSummary[] {
+  if (!ids.length) return [];
+  return db
+    .prepare(
+      `SELECT id, title, show, date, duration, url FROM episodes WHERE id IN (${placeholders(ids.length)})`,
+    )
+    .all(...ids) as unknown as EpisodeSummary[];
+}
+
 export function sectionsOfEpisode(id: string): SectionRow[] {
   return db
     .prepare(`SELECT id, idx, title, start_time, end_time FROM sections WHERE episode_id = ? ORDER BY idx`)

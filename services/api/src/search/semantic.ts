@@ -32,6 +32,9 @@ export interface Index {
   vectors: Float32Array; // row-major, one unit-length row per doc
   sections: Int32Array; // the section each doc opens
   channels: string[];
+  episodes: string[];
+  chapterDocs: Uint32Array;
+  episodeDoc: Map<string, number>; // episode id to its own doc
   hnsw?: Hnsw; // keyed by the table's ids
   rows: Map<number, number>; // table id to doc
 }
@@ -54,23 +57,35 @@ export function loadIndex(model: string, embeddingsDir: string): Index | undefin
     vectors: new Float32Array(count.n * dims),
     sections: new Int32Array(count.n),
     channels: [],
+    episodes: [],
+    chapterDocs: new Uint32Array(),
+    episodeDoc: new Map(),
     rows: new Map(),
   };
-  const rows = db.prepare(`SELECT id, channel_id, section_id, vector ${from} ORDER BY id`).iterate() as Iterable<{
+  const rows = db
+    .prepare(`SELECT id, kind, episode_id, channel_id, section_id, vector ${from} ORDER BY id`)
+    .iterate() as Iterable<{
     id: number;
+    kind: string;
+    episode_id: string;
     channel_id: string;
     section_id: number;
     vector: Uint8Array;
   }>;
+  const chapters: number[] = [];
   let i = 0;
   for (const r of rows) {
     const bytes = r.vector.slice(); // its own buffer, so float16 reads are aligned
     index.vectors.set(new Float16Array(bytes.buffer, 0, dims), i * dims);
     index.sections[i] = r.section_id;
     index.channels.push(r.channel_id);
+    index.episodes.push(r.episode_id);
+    if (r.kind === "chapter") chapters.push(i);
+    else index.episodeDoc.set(r.episode_id, i);
     index.rows.set(r.id, i);
     i++;
   }
+  index.chapterDocs = Uint32Array.from(chapters);
   index.hnsw = loadHnsw(path.join(embeddingsDir, "hnsw.usearch"), row.table_name as string, dims);
   return index;
 }
@@ -128,7 +143,7 @@ async function embedQuery(embed: Embedder, query: string): Promise<Float32Array>
   return vector;
 }
 
-function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: Float32Array): Float32Array {
+export function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: Float32Array): Float32Array {
   const scores = new Float32Array(docs.length);
   for (let n = 0; n < docs.length; n++) {
     // four sums: about twice as fast as one
@@ -144,7 +159,7 @@ function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: 
   return scores;
 }
 
-function best(scores: Float32Array, m: number): Uint32Array {
+export function best(scores: Float32Array, m: number): Uint32Array {
   const order = Uint32Array.from(scores.keys());
   if (m < scores.length) {
     const threshold = Float32Array.from(scores).sort()[scores.length - m];
