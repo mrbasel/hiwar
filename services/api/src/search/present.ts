@@ -1,4 +1,5 @@
 import type { Hit, Segment } from "../db/queries.js";
+import { link } from "../links.js";
 import { words } from "../normalize.js";
 
 const MOMENTS_PER_RESULT = 3;
@@ -18,10 +19,6 @@ export function highlight(text: string, terms: string[]): string {
       return hit ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part);
     })
     .join("");
-}
-
-function link(url: string, seconds: number): string {
-  return `${url}&t=${Math.floor(seconds)}s`;
 }
 
 function findMoments(segments: Segment[], terms: string[], url: string) {

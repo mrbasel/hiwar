@@ -144,3 +144,55 @@ export function listShows() {
     )
     .all();
 }
+
+export interface EpisodeRow {
+  id: string;
+  title: string | null;
+  show: string;
+  date: string;
+  duration: number | null;
+  url: string;
+  description: string | null;
+  transcript_source: string | null;
+  channel_id: string | null;
+  channel_name: string | null;
+  channel_url: string | null;
+}
+
+export interface SectionRow {
+  id: number;
+  idx: number;
+  title: string | null;
+  start_time: number;
+  end_time: number;
+}
+
+export interface UtteranceRow extends Segment {
+  speaker_change: number | null;
+}
+
+export function episodeById(id: string): EpisodeRow | undefined {
+  return db
+    .prepare(
+      `SELECT e.id, e.title, e.show, e.date, e.duration, e.url, e.description, e.transcript_source,
+         c.id AS channel_id, trim(c.name) AS channel_name, c.url AS channel_url
+       FROM episodes e LEFT JOIN channels c ON c.id = e.channel_id
+       WHERE e.id = ?`,
+    )
+    .get(id) as unknown as EpisodeRow | undefined;
+}
+
+export function sectionsOfEpisode(id: string): SectionRow[] {
+  return db
+    .prepare(`SELECT id, idx, title, start_time, end_time FROM sections WHERE episode_id = ? ORDER BY idx`)
+    .all(id) as unknown as SectionRow[];
+}
+
+export function segmentsOfEpisode(id: string): UtteranceRow[] {
+  return db
+    .prepare(
+      `SELECT section_id, idx, start_time, end_time, text, speaker_change
+       FROM segments WHERE episode_id = ? ORDER BY idx`,
+    )
+    .all(id) as unknown as UtteranceRow[];
+}

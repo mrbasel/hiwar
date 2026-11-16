@@ -1,12 +1,15 @@
 import { Collapsible } from "@base-ui/react/collapsible";
+import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { Episode, Moment, SearchHit } from "#api/search";
+import { EpisodeMeta } from "#components/episode/EpisodeMeta";
 import { buttonClass } from "#components/ui/Button";
 import { Tag } from "#components/ui/Tag";
+import { Thumbnail, videoId } from "#components/ui/Thumbnail";
 import { Timestamp } from "#components/ui/Timestamp";
 import { useDevMode } from "#lib/devMode";
-import { arabic, clock, cn } from "#lib/format";
+import { arabic, cn } from "#lib/format";
 
 const MATCH_LABEL = { keyword: "تطابق لفظي", semantic: "تطابق في المعنى" } as const;
 
@@ -27,12 +30,11 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
     <article className="py-5">
       <div className="flex items-start gap-4 sm:gap-6">
         <div className="min-w-0 flex-1">
-          <Meta episode={episode} />
+          <EpisodeMeta show={episode.show} date={episode.date} duration={episode.duration} />
           <h2 className="text-lg leading-snug font-semibold">
-            <a
-              href={episode.url}
-              target="_blank"
-              rel="noopener"
+            <Link
+              to="/episode/$id"
+              params={{ id: episode.id }}
               className="text-ink no-underline decoration-rule underline-offset-4 hover:underline"
               dangerouslySetInnerHTML={{ __html: episode.title_html }}
             />
@@ -66,7 +68,19 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
           </div>
         </div>
 
-        <Thumbnail episode={episode} />
+        {/* Out of the tab order: the title already links to the episode. */}
+        <Link
+          to="/episode/$id"
+          params={{ id: episode.id }}
+          tabIndex={-1}
+          className="mt-1 block w-24 shrink-0 overflow-hidden rounded-control sm:w-40"
+        >
+          <Thumbnail
+            videoId={videoId(episode.url, episode.id)}
+            alt={episode.title ?? "الحلقة"}
+            className="transition-opacity duration-150 hover:opacity-85"
+          />
+        </Link>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-4">
@@ -80,7 +94,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
             </Collapsible.Trigger>
             <Collapsible.Panel className="order-last mt-2 basis-full space-y-4 border-s-2 border-rule ps-4">
               {hits.map((hit) => (
-                <Section key={hit.section.id} hit={hit} />
+                <Section key={hit.section.id} episodeId={episode.id} hit={hit} />
               ))}
             </Collapsible.Panel>
           </Collapsible.Root>
@@ -101,51 +115,6 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
   );
 }
 
-function Meta({ episode }: { episode: Episode }) {
-  const sep = <span className="mx-1.5 text-faint">/</span>;
-  return (
-    <p className="text-xs text-muted">
-      <span>{episode.show.trim()}</span>
-      {sep}
-      <time dateTime={episode.date} dir="ltr">
-        {episode.date}
-      </time>
-      {episode.duration ? (
-        <>
-          {sep}
-          <span dir="ltr">{clock(episode.duration)}</span>
-        </>
-      ) : null}
-    </p>
-  );
-}
-
-// Out of the tab order: the title already links to the episode.
-function Thumbnail({ episode }: { episode: Episode }) {
-  const [failed, setFailed] = useState(false);
-  const id = new URL(episode.url).searchParams.get("v") ?? episode.id;
-  if (failed) return null;
-  return (
-    <a
-      href={episode.url}
-      target="_blank"
-      rel="noopener"
-      tabIndex={-1}
-      className="mt-1 block w-24 shrink-0 overflow-hidden rounded-control bg-sunken sm:w-40"
-    >
-      <img
-        src={`https://i.ytimg.com/vi/${id}/mqdefault.jpg`}
-        alt={episode.title ?? "الحلقة على يوتيوب"}
-        loading="lazy"
-        width={320}
-        height={180}
-        onError={() => setFailed(true)}
-        className="aspect-video w-full object-cover transition-opacity duration-150 hover:opacity-85"
-      />
-    </a>
-  );
-}
-
 function InlineTime({ seconds, href, className }: { seconds: number; href: string; className?: string }) {
   return (
     <span className="me-3 inline-block align-[0.15em]">
@@ -154,13 +123,20 @@ function InlineTime({ seconds, href, className }: { seconds: number; href: strin
   );
 }
 
-function Section({ hit }: { hit: SearchHit }) {
+function Section({ episodeId, hit }: { episodeId: string; hit: SearchHit }) {
   const { section } = hit;
   return (
     <section>
       <h3 className="flex items-baseline gap-2 text-base font-medium">
         <Timestamp seconds={section.start} href={section.link} />
-        <span dangerouslySetInnerHTML={{ __html: section.title_html }} />
+        <Link
+          to="/episode/$id"
+          params={{ id: episodeId }}
+          search={{ tab: "transcript" }}
+          hash={`section-${section.idx}`}
+          className="text-ink no-underline decoration-rule underline-offset-4 hover:underline"
+          dangerouslySetInnerHTML={{ __html: section.title_html }}
+        />
       </h3>
       {hit.moments.map((m) => (
         <p key={m.start} className="mt-1 font-read text-[1.3rem] leading-[1.6]">

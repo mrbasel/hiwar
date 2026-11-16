@@ -57,18 +57,19 @@ The map's canvas keeps its fixed `stage` ground (`#18181a`) and its own data col
 
 ## Primitives
 
-| Component                                                    | For                                                 |
-| ------------------------------------------------------------ | --------------------------------------------------- |
-| `Button` (`primary`, `secondary`, `quiet`; `sm`, `md`, `lg`) | At most one `primary` per view                      |
-| `IconButton`                                                 | Icon-only actions; always labelled                  |
-| `TextField` (`query`, `field`)                               | `query` is the search box a page is built around    |
-| `Segmented` / `Segment`                                      | Two or three exclusive options, such as search mode |
-| `Chip` / `chipClass`                                         | Filters; `active` when not on their default         |
-| `Checkbox`                                                   | Multi-select lists, such as channels                |
-| `Tag` (`plain`, `accent`, `warn`)                            | Non-interactive facts about a result                |
-| `Timestamp`                                                  | A link to a second in an episode                    |
-| `Gloss`, `Quote`                                             | The margin layout and quoted speech                 |
-| `panelClass`                                                 | Popovers and menus                                  |
+| Component                                                    | For                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------ |
+| `Button` (`primary`, `secondary`, `quiet`; `sm`, `md`, `lg`) | At most one `primary` per view                         |
+| `IconButton`                                                 | Icon-only actions; always labelled                     |
+| `TextField` (`query`, `field`)                               | `query` is the search box a page is built around       |
+| `Segmented` / `Segment`                                      | Two or three exclusive options, such as search mode    |
+| `Tabs` / `TabList` / `Tab` / `TabPanel`                      | Views of one thing, such as description and transcript |
+| `Chip` / `chipClass`                                         | Filters; `active` when not on their default            |
+| `Checkbox`                                                   | Multi-select lists, such as channels                   |
+| `Tag` (`plain`, `accent`, `warn`)                            | Non-interactive facts about a result                   |
+| `Timestamp`                                                  | A link to a second in an episode                       |
+| `Gloss`, `Quote`                                             | The margin layout and quoted speech                    |
+| `panelClass`                                                 | Popovers and menus                                     |
 
 ## Motion
 
