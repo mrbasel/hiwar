@@ -1,10 +1,15 @@
 export type Mode = "hybrid" | "keyword";
 
+export type DateRange = "all" | "day" | "week" | "month" | "year" | "custom";
+
 export interface SearchParams {
   q: string;
   page: number;
   mode: Mode;
   shows: string[]; // every channel if empty
+  date: DateRange;
+  from?: string; // YYYY-MM-DD
+  to?: string;
 }
 
 export const searchKeys = {
@@ -58,6 +63,8 @@ export interface SearchResponse {
   total: number;
   page: number;
   limit: number;
+  startDate: string | null;
+  endDate: string | null;
   took_ms: number;
   results: SearchHit[];
 }

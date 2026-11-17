@@ -1,7 +1,6 @@
 // Search over the embeddings `pipeline.embed` writes, all held in memory.
 // Unfiltered searches go through the HNSW index `pipeline.hnsw` saves next to
-// map.json; searches limited to some channels compare the query with each of
-// their docs, which is exact and, for a few channels, fast.
+// map.json; filtered searches compare the query with each doc that passes.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,10 +32,17 @@ export interface Index {
   sections: Int32Array; // the section each doc opens
   channels: string[];
   episodes: string[];
+  dates: string[];
   chapterDocs: Uint32Array;
   episodeDoc: Map<string, number>; // episode id to its own doc
   hnsw?: Hnsw; // keyed by the table's ids
   rows: Map<number, number>; // table id to doc
+}
+
+export interface DocFilter {
+  channels?: Set<string>;
+  startDate?: string;
+  endDate?: string;
 }
 
 // Docs without a section are left out, since a hit on them can't be shown.
@@ -58,12 +64,17 @@ export function loadIndex(model: string, embeddingsDir: string): Index | undefin
     sections: new Int32Array(count.n),
     channels: [],
     episodes: [],
+    dates: [],
     chapterDocs: new Uint32Array(),
     episodeDoc: new Map(),
     rows: new Map(),
   };
   const rows = db
-    .prepare(`SELECT id, kind, episode_id, channel_id, section_id, vector ${from} ORDER BY id`)
+    .prepare(
+      `SELECT t.id, t.kind, t.episode_id, t.channel_id, t.section_id, t.vector, e.date
+       FROM ${row.table_name} t LEFT JOIN episodes e ON e.id = t.episode_id
+       WHERE t.section_id IS NOT NULL ORDER BY t.id`,
+    )
     .iterate() as Iterable<{
     id: number;
     kind: string;
@@ -71,6 +82,7 @@ export function loadIndex(model: string, embeddingsDir: string): Index | undefin
     channel_id: string;
     section_id: number;
     vector: Uint8Array;
+    date: string | null;
   }>;
   const chapters: number[] = [];
   let i = 0;
@@ -80,6 +92,7 @@ export function loadIndex(model: string, embeddingsDir: string): Index | undefin
     index.sections[i] = r.section_id;
     index.channels.push(r.channel_id);
     index.episodes.push(r.episode_id);
+    index.dates.push(r.date ?? "");
     if (r.kind === "chapter") chapters.push(i);
     else index.episodeDoc.set(r.episode_id, i);
     index.rows.set(r.id, i);
@@ -173,16 +186,19 @@ export async function semanticSearch(
   query: string,
   k: number,
   embed: Embedder,
-  channels?: Set<string>,
+  filter: DocFilter = {},
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);
-  if (index.hnsw && !channels) {
+  const { channels, startDate, endDate } = filter;
+  if (index.hnsw && !channels && !startDate && !endDate) {
     const ids = hnswSearch(index, index.hnsw, q, k);
     if (ids.length === k) return ids;
   }
   const { vectors, dims, sections } = index;
   let docs = Uint32Array.from(sections.keys());
   if (channels) docs = docs.filter((i) => channels.has(index.channels[i]));
+  if (startDate) docs = docs.filter((i) => index.dates[i] >= startDate);
+  if (endDate) docs = docs.filter((i) => index.dates[i] <= endDate);
   const scores = dotProducts(vectors, dims, docs, q);
 
   // Several docs can open the same section, so take the best few times k

@@ -1,6 +1,6 @@
 import { semantic } from "../bootstrap.js";
 import * as queries from "../db/queries.js";
-import type { Hit, Segment } from "../db/queries.js";
+import type { Hit, Scope, Segment } from "../db/queries.js";
 import { presentHit } from "./present.js";
 import { parseQuery, type ParsedQuery } from "./query.js";
 import { groupByEpisode, RRF_DEPTH, rrf } from "./rank.js";
@@ -12,6 +12,8 @@ export interface SearchParams {
   limit?: number; // episodes per page
   mode?: "hybrid" | "keyword";
   shows?: string[]; // every channel if empty
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;
 }
 
 export class QueryError extends Error {}
@@ -21,8 +23,25 @@ function parse(params: SearchParams) {
   if (!parsed) throw new QueryError("Type at least one word to search for.");
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
   const page = Math.max(params.page ?? 1, 1);
-  const shows = [...new Set(params.shows ?? [])];
-  return { parsed, limit, page, shows };
+  const scope: Scope = {
+    shows: [...new Set(params.shows ?? [])],
+    startDate: day(params.startDate, "startDate"),
+    endDate: day(params.endDate, "endDate"),
+  };
+  if (scope.startDate && scope.endDate && scope.startDate > scope.endDate) {
+    throw new QueryError("startDate is after endDate.");
+  }
+  return { parsed, limit, page, scope };
+}
+
+function day(value: string | undefined, name: string): string | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(`${value}T00:00:00Z`);
+  const real = !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !real) {
+    throw new QueryError(`${name} must be a date as YYYY-MM-DD.`);
+  }
+  return value;
 }
 
 function fts<T>(run: () => T): T {
@@ -47,29 +66,34 @@ export async function search(params: SearchParams) {
 // Pages by episode, so an episode's sections stay on one page.
 function bm25Search(params: SearchParams) {
   const started = performance.now();
-  const { parsed, limit, page, shows } = parse(params);
-  const total = fts(() => queries.countMatchingEpisodes(parsed.match, shows));
-  const episodeIds = fts(() => queries.bm25EpisodeIds(parsed.match, shows, limit, (page - 1) * limit));
-  const hits = episodeIds.length ? fts(() => queries.bm25Hits(parsed.match, shows, episodeIds)) : [];
+  const { parsed, limit, page, scope } = parse(params);
+  const total = fts(() => queries.countMatchingEpisodes(parsed.match, scope));
+  const episodeIds = fts(() => queries.bm25EpisodeIds(parsed.match, scope, limit, (page - 1) * limit));
+  const hits = episodeIds.length ? fts(() => queries.bm25Hits(parsed.match, scope, episodeIds)) : [];
   return {
     mode: "keyword",
     query: parsed.match,
     total,
     page,
     limit,
+    startDate: scope.startDate ?? null,
+    endDate: scope.endDate ?? null,
     took_ms: Math.round(performance.now() - started),
     results: hydrate(groupByEpisode(hits).flat(), parsed),
   };
 }
 
-// Both rankings are limited to the chosen channels before taking their top
-// RRF_DEPTH, so small channels aren't crowded out by the rest.
+// Both rankings are filtered before taking their top RRF_DEPTH, so small
+// channels and short ranges aren't crowded out.
 async function hybridSearch(params: SearchParams, semantic: Semantic) {
   const started = performance.now();
-  const { parsed, limit, page, shows } = parse(params);
-  const bm25Ids = fts(() => queries.bm25SectionIds(parsed.match, shows, RRF_DEPTH));
-  const channels = shows.length ? new Set(shows) : undefined;
-  const semanticIds = await semanticSearch(semantic.index, params.q, RRF_DEPTH, semantic.embed, channels);
+  const { parsed, limit, page, scope } = parse(params);
+  const bm25Ids = fts(() => queries.bm25SectionIds(parsed.match, scope, RRF_DEPTH));
+  const semanticIds = await semanticSearch(semantic.index, params.q, RRF_DEPTH, semantic.embed, {
+    channels: scope.shows.length ? new Set(scope.shows) : undefined,
+    startDate: scope.startDate,
+    endDate: scope.endDate,
+  });
   const byKeyword = new Set(bm25Ids);
   const bySemantic = new Set(semanticIds);
 
@@ -84,6 +108,8 @@ async function hybridSearch(params: SearchParams, semantic: Semantic) {
     total: groups.length,
     page,
     limit,
+    startDate: scope.startDate ?? null,
+    endDate: scope.endDate ?? null,
     took_ms: Math.round(performance.now() - started),
     results: hydrate(hits, parsed).map((r) => ({
       ...r,

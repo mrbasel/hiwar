@@ -1,9 +1,11 @@
+import { Link } from "@tanstack/react-router";
 import { type SearchParams, useSearchResults } from "#api/search";
 import { EpisodeResult } from "#components/EpisodeResult";
 import { Pager } from "#components/Pager";
 import { arabic, cn } from "#lib/format";
 
 const NO_RESULTS = "لا توجد نتائج. جرّب كلمات أقل، أو تهجئة أخرى للاسم، أو استخدم * للبحث ببداية الكلمة.";
+const NO_RESULTS_IN_RANGE = "لا توجد نتائج في هذه الفترة.";
 
 export function SearchResults({ params }: { params: SearchParams }) {
   const { data, error, isFetching, isPlaceholderData } = useSearchResults(params);
@@ -17,9 +19,21 @@ export function SearchResults({ params }: { params: SearchParams }) {
           : loading
             ? "جارٍ البحث…"
             : data &&
-              (data.total
-                ? `${arabic(data.total)} حلقة مطابقة في ${arabic(Math.round(data.took_ms / 100) / 10)} ثانية`
-                : NO_RESULTS)}
+              (data.total ? (
+                `${arabic(data.total)} حلقة مطابقة في ${arabic(Math.round(data.took_ms / 100) / 10)} ثانية`
+              ) : params.date === "all" ? (
+                NO_RESULTS
+              ) : (
+                <>
+                  {NO_RESULTS_IN_RANGE}{" "}
+                  <Link
+                    to="/"
+                    search={(prev) => ({ ...prev, page: 1, date: "all", from: undefined, to: undefined })}
+                  >
+                    ابحث في كل الأوقات
+                  </Link>
+                </>
+              ))}
       </p>
       {data && !error && (
         <>

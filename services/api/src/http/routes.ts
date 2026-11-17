@@ -20,6 +20,8 @@ api.get("/search", async (req, res) => {
     limit: Number(req.query.limit) || 20,
     mode: req.query.mode === "keyword" ? "keyword" : "hybrid",
     shows: str(req.query.shows)?.split(",").map((s) => s.trim()).filter(Boolean),
+    startDate: str(req.query.startDate),
+    endDate: str(req.query.endDate),
   };
   try {
     res.json(await search(params));

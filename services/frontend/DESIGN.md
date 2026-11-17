@@ -70,9 +70,10 @@ The map's canvas keeps its fixed `stage` ground (`#18181a`) and its own data col
 | `Timestamp`                                                  | A link to a second in an episode                       |
 | `Gloss`, `Quote`                                             | The margin layout and quoted speech                    |
 | `panelClass`                                                 | Popovers and menus                                     |
+| `Dialog` / `DialogPopup`                                     | A task the page waits on, such as a custom date range  |
 
 ## Motion
 
-Only in answer to an action: popovers fade and drop 4px in 150ms, and colour
-changes on hover take 150ms. No entrance animations. Reduced motion turns all
+Only in answer to an action: popovers and dialogs fade and drop 4px in 150ms,
+and colour changes on hover take 150ms. No entrance animations. Reduced motion turns all
 of it off.

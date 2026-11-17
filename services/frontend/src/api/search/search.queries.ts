@@ -7,6 +7,7 @@ import {
   type SearchResponse,
   searchKeys,
 } from "#api/search/search.types";
+import { dateBounds } from "#lib/dates";
 
 export function useSearchResults(params: SearchParams) {
   return useQuery({
@@ -16,6 +17,9 @@ export function useSearchResults(params: SearchParams) {
       if (params.page > 1) url.set("page", String(params.page));
       if (params.mode === "keyword") url.set("mode", "keyword");
       if (params.shows.length) url.set("shows", params.shows.join(","));
+      const { startDate, endDate } = dateBounds(params);
+      if (startDate) url.set("startDate", startDate);
+      if (endDate) url.set("endDate", endDate);
       return request<SearchResponse>(`/search?${url}`, { signal });
     },
     select: toResultsPage,

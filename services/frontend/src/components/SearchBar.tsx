@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Mode, SearchParams } from "#api/search";
+import { DateFilter } from "#components/DateFilter";
 import { DevModeToggle } from "#components/DevModeToggle";
 import { ShowPicker } from "#components/ShowPicker";
 import { ThemeToggle } from "#components/ThemeToggle";
@@ -75,6 +76,7 @@ export function SearchBar({
           <Segment value="keyword">بالكلمات فقط</Segment>
         </Segmented>
         <ShowPicker value={params.shows} onChange={(shows) => search({ shows })} />
+        <DateFilter value={params} onChange={search} />
       </div>
     </header>
   );

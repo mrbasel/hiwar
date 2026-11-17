@@ -4,19 +4,34 @@ import type { SearchParams } from "#api/search";
 import { Home } from "#components/Home";
 import { SearchBar } from "#components/SearchBar";
 import { SearchResults } from "#components/SearchResults";
+import { DAY_PATTERN } from "#lib/dates";
 
-const defaults: SearchParams = { q: "", page: 1, mode: "hybrid", shows: [] };
+const defaults: SearchParams = { q: "", page: 1, mode: "hybrid", shows: [], date: "all" };
+
+const day = z.string().regex(DAY_PATTERN).optional().catch(undefined);
 
 // Every param is optional in links; anything malformed falls back to its default.
-const searchSchema = z.object({
-  q: z.string().default(defaults.q).catch(defaults.q),
-  page: z.coerce.number().int().min(1).default(defaults.page).catch(defaults.page),
-  mode: z.enum(["hybrid", "keyword"]).default(defaults.mode).catch(defaults.mode),
-  shows: z
-    .preprocess((v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v), z.array(z.string()))
-    .default(defaults.shows)
-    .catch(defaults.shows),
-});
+const searchSchema = z
+  .object({
+    q: z.string().default(defaults.q).catch(defaults.q),
+    page: z.coerce.number().int().min(1).default(defaults.page).catch(defaults.page),
+    mode: z.enum(["hybrid", "keyword"]).default(defaults.mode).catch(defaults.mode),
+    shows: z
+      .preprocess((v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v), z.array(z.string()))
+      .default(defaults.shows)
+      .catch(defaults.shows),
+    date: z
+      .enum(["all", "day", "week", "month", "year", "custom"])
+      .default(defaults.date)
+      .catch(defaults.date),
+    from: day,
+    to: day,
+  })
+  .transform(({ from, to, ...params }): SearchParams => {
+    if (params.date !== "custom") return params;
+    if ((!from && !to) || (from && to && from > to)) return { ...params, date: "all" };
+    return { ...params, from, to };
+  });
 
 export const Route = createFileRoute("/")({
   validateSearch: searchSchema,

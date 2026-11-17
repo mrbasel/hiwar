@@ -43,58 +43,71 @@ const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
   e.id AS episode_id, e.title AS episode_title, e.show, e.date, e.url, e.duration,
   e.description, e.transcript_source`;
 
-// Bind the match, then the channel ids.
-function ftsFrom(shows: string[]): string {
-  const scope = shows.length ? ` AND e.channel_id IN (${placeholders(shows.length)})` : "";
+export interface Scope {
+  shows: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+// Bind the match, then scopeArgs().
+function ftsFrom(scope: Scope): string {
+  const where = ["sections_fts MATCH ?"];
+  if (scope.shows.length) where.push(`e.channel_id IN (${placeholders(scope.shows.length)})`);
+  if (scope.startDate) where.push("e.date >= ?");
+  if (scope.endDate) where.push("e.date <= ?");
   return `
     FROM sections_fts
     JOIN sections s ON s.id = sections_fts.rowid
     JOIN episodes e ON e.id = s.episode_id
-    WHERE sections_fts MATCH ?${scope}`;
+    WHERE ${where.join(" AND ")}`;
 }
 
-export function countMatchingEpisodes(match: string, shows: string[]): number {
+function scopeArgs(scope: Scope): string[] {
+  return [scope.shows, scope.startDate ?? [], scope.endDate ?? []].flat();
+}
+
+export function countMatchingEpisodes(match: string, scope: Scope): number {
   return Number(
-    db.prepare(`SELECT count(DISTINCT s.episode_id) AS n ${ftsFrom(shows)}`).get(match, ...shows)!.n,
+    db.prepare(`SELECT count(DISTINCT s.episode_id) AS n ${ftsFrom(scope)}`).get(match, ...scopeArgs(scope))!.n,
   );
 }
 
 export function bm25EpisodeIds(
   match: string,
-  shows: string[],
+  scope: Scope,
   limit: number,
   offset: number,
 ): string[] {
   return db
     .prepare(
       // MATERIALIZED: bm25() can't run inside an aggregate.
-      `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${BM25} AS score ${ftsFrom(shows)})
+      `WITH matches AS MATERIALIZED (SELECT s.episode_id, ${BM25} AS score ${ftsFrom(scope)})
        SELECT episode_id FROM matches
        GROUP BY episode_id ORDER BY min(score), episode_id
        LIMIT ? OFFSET ?`,
     )
-    .all(match, ...shows, limit, offset)
+    .all(match, ...scopeArgs(scope), limit, offset)
     .map((r) => String(r.episode_id));
 }
 
-export function bm25Hits(match: string, shows: string[], episodeIds: string[]): Hit[] {
+export function bm25Hits(match: string, scope: Scope, episodeIds: string[]): Hit[] {
   return db
     .prepare(
-      `SELECT ${HIT_COLUMNS}, ${BM25} AS score ${ftsFrom(shows)}
+      `SELECT ${HIT_COLUMNS}, ${BM25} AS score ${ftsFrom(scope)}
        AND s.episode_id IN (${placeholders(episodeIds.length)})
        ORDER BY score`,
     )
-    .all(match, ...shows, ...episodeIds) as unknown as Hit[];
+    .all(match, ...scopeArgs(scope), ...episodeIds) as unknown as Hit[];
 }
 
-export function bm25SectionIds(match: string, shows: string[], limit: number): number[] {
+export function bm25SectionIds(match: string, scope: Scope, limit: number): number[] {
   return db
     .prepare(
-      `SELECT s.id ${ftsFrom(shows)}
+      `SELECT s.id ${ftsFrom(scope)}
        ORDER BY ${BM25}
        LIMIT ?`,
     )
-    .all(match, ...shows, limit)
+    .all(match, ...scopeArgs(scope), limit)
     .map((r) => Number(r.id));
 }
 
