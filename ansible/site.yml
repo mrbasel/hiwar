@@ -1,0 +1,6 @@
+---
+- name: Configure admin users and SSH
+  ansible.builtin.import_playbook: users.yml
+
+- name: Configure UFW firewall
+  ansible.builtin.import_playbook: firewall.yml

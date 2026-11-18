@@ -1,0 +1,70 @@
+---
+- name: Configure admin users and SSH access
+  hosts: rawi
+  become: true
+
+  vars:
+    admin_users:
+      - name: basel
+        authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKM/wIDXxx/t/28eQvTIymdNNOQsZllNR+criQXMLIP"
+      - name: ansible
+        authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1wtCByrpHlmTyuQtzFSq90KDiznsMh9Q4o3wCEkoxJ ansible-automation"
+
+  tasks:
+    - name: Ensure admin users exist
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        state: present
+        create_home: true
+      loop: "{{ admin_users }}"
+
+    - name: Ensure .ssh directories
+      ansible.builtin.file:
+        path: "/home/{{ item.name }}/.ssh"
+        state: directory
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0700"
+      loop: "{{ admin_users }}"
+
+    - name: Install authorized keys
+      ansible.builtin.authorized_key:
+        user: "{{ item.0.name }}"
+        key: "{{ item.1 }}"
+        state: present
+      loop: "{{ admin_users | subelements('authorized_keys') }}"
+
+    # The accounts have no passwords, so sudo can't ask for one
+    - name: Allow passwordless sudo for admin users
+      community.general.sudoers:
+        name: "{{ item.name }}"
+        user: "{{ item.name }}"
+        commands: ALL
+        nopassword: true
+      loop: "{{ admin_users }}"
+
+    # A drop-in rather than edits to sshd_config: Ubuntu reads sshd_config.d
+    # first, and sshd keeps the first value it sees, so this one wins
+    - name: Harden sshd configuration
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-hardening.conf
+        content: |
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          AllowUsers {{ admin_users | map(attribute='name') | join(' ') }}
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Restart SSH
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: restarted
