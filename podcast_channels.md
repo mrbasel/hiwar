@@ -39,6 +39,7 @@ Subscriber and video counts as of 2026-11-04. Arabic auto-caption availability w
 | 29 | [Edraak Media](https://www.youtube.com/@edraakmedia) | 162,000 | 1400 | Edraak Media: بس مباشر, بوح |
 | 30 | [مخيال](https://www.youtube.com/@Mekhyal_sba) | 268,000 | 1300 | مخيال with Abdullah Al-Bandar |
 | 31 | [صفر لواحد](https://www.youtube.com/@ZTO__KSA) | 1,020,000 | 48 | Zero to One (tech/business): شفل, في ليب, Money 20/20, في المكتب, يوم مع, صفر لواحد .AI, من السوق. Downloaded per playlist, so each show gets its own folder; added 2026-11-07 |
+| 32 | [ريادي مختلف](https://www.youtube.com/@Riyadi_Mukhtalif) | 34,500 | 129 | Mukhtalif network (entrepreneurship/business): ديل, يونيكورن, وكالة, خزامى, منيو, فيلمرنت, مجلس رايم, نطاق, مرقمن, Fintech525, نجم الشمال, ترتيب… Downloaded per playlist, so each show gets its own folder; the channel itself catches shows without a playlist (نجم الشمال, ترتيب…). Added 2026-11-18 |
 
 ## Single-show podcast channels
 

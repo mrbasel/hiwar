@@ -86,6 +86,57 @@ name = "بودكاست بترولي"
 group = "Mukhtalif"
 
 [[source]]
+url = "https://www.youtube.com/playlist?list=PLT7JvkOHJK_Ofttt-To72hzv937u6UqHu"
+name = "بودكاست ديل"
+group = "Mukhtalif"
+notes = "@Riyadi_Mukhtalif is downloaded per playlist, so each show gets its own folder; the channel itself (under Channels) picks up shows without a playlist."
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLT7JvkOHJK_P8tL4xLPYzrs6P2mkulwQG"
+name = "بودكاست يونيكورن"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLT7JvkOHJK_MzrOFcw6lXKGYvo9lTvbxg"
+name = "بودكاست وكالة"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLCny2dQQYdDg"
+name = "بودكاست خزامى"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLBVu9Ks3sVNE"
+name = "بودكاست منيو"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLT7JvkOHJK_PuxiKJUGsN6MXSiyyw67fs"
+name = "بودكاست فيلمرنت"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLHir94QynEg8"
+name = "بودكاست مجلس رايم"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLd33IutakM4A"
+name = "بودكاست نطاق"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLT7JvkOHJK_P_tMz2VGf2E5n-nsY0zOQx"
+name = "بودكاست مرقمن"
+group = "Mukhtalif"
+
+[[source]]
+url = "https://www.youtube.com/playlist?list=PLQdipFk8Q11A"
+name = "بودكاست Fintech525"
+group = "Mukhtalif"
+
+[[source]]
 url = "https://www.youtube.com/playlist?list=PLuNDjeebaYbijd0Y16AisTRG9VW-UBLrq"
 name = "بودكاست زخم"
 group = "faragh"
@@ -475,6 +526,11 @@ name = "غـمـد"
 [[source]]
 url = "https://www.youtube.com/@Jinai_Mukhtalif"
 name = "جنائي مختلف"
+
+[[source]]
+url = "https://www.youtube.com/@Riyadi_Mukhtalif"
+name = "ريادي مختلف"
+notes = "Its playlists are listed above so those shows keep their own folders; this catches the rest (نجم الشمال, ترتيب, …)."
 
 [[source]]
 url = "https://www.youtube.com/@mohannedmajeed1"
