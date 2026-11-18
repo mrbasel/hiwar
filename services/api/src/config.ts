@@ -20,6 +20,8 @@ export const config = {
   cloudflareToken: process.env.CF_API_TOKEN,
   port: Number(process.env.PORT ?? 3000),
   host: process.env.HOST ?? "0.0.0.0",
+  // "1" behind a reverse proxy, so rate limits see the client's IP.
+  trustProxy: process.env.TRUST_PROXY === "1",
   // The frontend's build (../frontend, `pnpm build`), served alongside the API.
   publicDir: process.env.PUBLIC_DIR ?? path.join(ROOT, "services/frontend/dist/client"),
 };

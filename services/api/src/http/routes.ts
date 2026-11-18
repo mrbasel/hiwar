@@ -1,4 +1,5 @@
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config.js";
@@ -11,9 +12,19 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
+function limit(perMinute: number) {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: perMinute,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "طلبات كثيرة، حاول بعد دقيقة." },
+  });
+}
+
 export const api = express.Router();
 
-api.get("/search", async (req, res) => {
+api.get("/search", limit(30), async (req, res) => {
   const params: SearchParams = {
     q: str(req.query.q) ?? "",
     page: Number(req.query.page) || 1,
@@ -41,7 +52,7 @@ api.get("/episodes/:id", (req, res) => {
   else res.status(404).json({ error: "لا توجد حلقة بهذا المعرّف." });
 });
 
-api.get("/episodes/:id/recommendations", (req, res) => {
+api.get("/episodes/:id/recommendations", limit(60), (req: express.Request<{ id: string }>, res) => {
   if (!episodeById(req.params.id)) {
     res.status(404).json({ error: "لا توجد حلقة بهذا المعرّف." });
     return;

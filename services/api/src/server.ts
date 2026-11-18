@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { api } from "./http/routes.js";
 
 const app = express();
+if (config.trustProxy) app.set("trust proxy", 1);
 app.use("/api", api);
 app.use(express.static(config.publicDir));
 // The frontend is a single-page app: any other page gets its shell, and its
