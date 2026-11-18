@@ -1,9 +1,19 @@
 import { config } from "./config.js";
-import { loadIndex, localEmbedder, openRouterEmbedder, type Semantic } from "./search/semantic.js";
+import {
+  cloudflareEmbedder,
+  loadIndex,
+  localEmbedder,
+  openRouterEmbedder,
+  type Semantic,
+} from "./search/semantic.js";
 
 async function loadSemantic(): Promise<Semantic | undefined> {
   if (config.queryEmbedder === "openrouter" && !config.openRouterKey) {
     console.warn("OPENROUTER_KEY not set: BM25 search only");
+    return undefined;
+  }
+  if (config.queryEmbedder === "cloudflare" && !(config.cloudflareAccount && config.cloudflareToken)) {
+    console.warn("CF_ACCOUNT_ID or CF_API_TOKEN not set: BM25 search only");
     return undefined;
   }
 
@@ -20,6 +30,9 @@ async function loadSemantic(): Promise<Semantic | undefined> {
 
   if (config.queryEmbedder === "openrouter") {
     return { index, embed: openRouterEmbedder(index.model, config.openRouterKey!) };
+  }
+  if (config.queryEmbedder === "cloudflare") {
+    return { index, embed: cloudflareEmbedder(index.model, config.cloudflareAccount!, config.cloudflareToken!) };
   }
   started = performance.now();
   console.log(`loading ${index.model} for queries from ${config.modelsDir} (downloaded on first start)`);

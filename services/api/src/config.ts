@@ -13,9 +13,11 @@ export const config = {
   embeddingsDir: process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3"),
   // Local model, downloaded on first start (~2.3 GB).
   modelsDir: process.env.MODELS_DIR ?? path.join(ROOT, "models"),
-  // "local" or "openrouter".
+  // "local", "openrouter" or "cloudflare" (Workers AI).
   queryEmbedder: process.env.QUERY_EMBEDDER ?? "local",
   openRouterKey: process.env.OPENROUTER_KEY,
+  cloudflareAccount: process.env.CF_ACCOUNT_ID,
+  cloudflareToken: process.env.CF_API_TOKEN,
   port: Number(process.env.PORT ?? 3000),
   host: process.env.HOST ?? "0.0.0.0",
   // The frontend's build (../frontend, `pnpm build`), served alongside the API.

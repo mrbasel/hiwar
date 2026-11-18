@@ -9,11 +9,14 @@ import { Index as Hnsw, MetricKind, ScalarKind } from "usearch";
 import { db } from "../db/connection.js";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
+const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4/accounts";
 const TIMEOUT_MS = 5000;
 const CACHED_QUERIES = 1000;
 const HNSW_CANDIDATES = 1600;
 // ONNX versions of the indexed models; fp32 matches OpenRouter's vectors.
 const LOCAL_MODELS: Record<string, string> = { "baai/bge-m3": "Xenova/bge-m3" };
+// Workers AI versions of the indexed models; bge-m3's match OpenRouter's vectors.
+const CLOUDFLARE_MODELS: Record<string, string> = { "baai/bge-m3": "@cf/baai/bge-m3" };
 
 export type Embedder = (query: string) => Promise<Float32Array>;
 
@@ -141,6 +144,25 @@ export function openRouterEmbedder(model: string, key: string): Embedder {
     if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const body = await res.json();
     const vector = Float32Array.from(body.data?.[0]?.embedding ?? []);
+    if (!vector.length) throw new Error(`no embedding in reply: ${JSON.stringify(body).slice(0, 200)}`);
+    const norm = Math.hypot(...vector);
+    return vector.map((x) => x / norm);
+  };
+}
+
+export function cloudflareEmbedder(model: string, account: string, token: string): Embedder {
+  const cf = CLOUDFLARE_MODELS[model];
+  if (!cf) throw new Error(`no Workers AI version of ${model}`);
+  return async (query) => {
+    const res = await fetch(`${CLOUDFLARE_API}/${account}/ai/run/${cf}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ text: [query] }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`Workers AI ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const body = await res.json();
+    const vector = Float32Array.from(body.result?.data?.[0] ?? []);
     if (!vector.length) throw new Error(`no embedding in reply: ${JSON.stringify(body).slice(0, 200)}`);
     const norm = Math.hypot(...vector);
     return vector.map((x) => x / norm);
