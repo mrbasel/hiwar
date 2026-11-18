@@ -16,9 +16,15 @@ export interface SearchParams {
   endDate?: string;
 }
 
+// Each new query is embedded, so long ones are costly to serve.
+const MAX_QUERY_CHARS = 200;
+
 export class QueryError extends Error {}
 
 function parse(params: SearchParams) {
+  if (params.q.length > MAX_QUERY_CHARS) {
+    throw new QueryError(`The query is longer than ${MAX_QUERY_CHARS} characters.`);
+  }
   const parsed = parseQuery(params.q);
   if (!parsed) throw new QueryError("Type at least one word to search for.");
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);

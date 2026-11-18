@@ -49,6 +49,7 @@ export function SearchBar({
           >
             <TextField
               variant="query"
+              maxLength={200}
               type="search"
               value={text}
               onValueChange={setText}

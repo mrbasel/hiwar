@@ -39,6 +39,7 @@ export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p:
             <div className="relative">
               <TextField
                 variant="query"
+                maxLength={200}
                 type="search"
                 value={text}
                 onValueChange={setText}
