@@ -1,0 +1,19 @@
+---
+# Secrets are in vault.yml, as vault_* (ansible-vault; see ansible.cfg).
+
+admin_users:
+  - name: basel
+    authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKM/wIDXxx/t/28eQvTIymdNNOQsZllNR+criQXMLIP"
+  - name: ansible
+    authorized_keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1wtCByrpHlmTyuQtzFSq90KDiznsMh9Q4o3wCEkoxJ ansible-automation"
+
+# Deploys the app from GitHub Actions; its private key is the repo's
+# DEPLOY_SSH_KEY secret.
+deploy_user: deploy
+deploy_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBniR0cuMskzkcEpMQ7By9c9+vjdDnwa+r3rULNJQNh9 rawi-deploy (GitHub Actions)"
+
+swap_size: 2G
+node_major: 24
+app_port: 3000

@@ -4,6 +4,9 @@
 #
 # Extra args are passed to ansible-playbook. The host's address isn't in the
 # repo: it comes from a `Host rawi` entry (HostName <ip>) in ~/.ssh/config.
+# Secrets are in host_vars/rawi/vault.yml, opened with the password in
+# ~/.config/rawi/vault-pass (see ansible.cfg); edit them with
+# `ansible-vault edit host_vars/rawi/vault.yml`.
 #
 # Usage:
 #   ./ansible/scripts/apply.sh                  # apply

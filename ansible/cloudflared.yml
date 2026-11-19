@@ -1,0 +1,69 @@
+---
+# The tunnel itself, its route to the app and its DNS record are created in
+# Cloudflare by scripts/tunnel.sh (in this directory); this runs its connector on the server.
+- name: Run the Cloudflare Tunnel connector
+  hosts: rawi
+  become: true
+
+  tasks:
+    - name: Add Cloudflare's signing key
+      ansible.builtin.get_url:
+        url: https://pkg.cloudflare.com/cloudflare-main.gpg
+        dest: /usr/share/keyrings/cloudflare-main.gpg
+        mode: "0644"
+
+    - name: Add the cloudflared repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main"
+        filename: cloudflared
+        state: present
+
+    # Updated with the system's packages, so the unit runs it with --no-autoupdate
+    - name: Install cloudflared
+      ansible.builtin.apt:
+        name: cloudflared
+        state: present
+
+    - name: Create the user cloudflared runs as
+      ansible.builtin.user:
+        name: cloudflared
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create the config directory
+      ansible.builtin.file:
+        path: /etc/cloudflared
+        state: directory
+        mode: "0755"
+
+    - name: Write the tunnel token
+      ansible.builtin.copy:
+        dest: /etc/cloudflared/token.env
+        content: "TUNNEL_TOKEN={{ vault_tunnel_token }}\n"
+        owner: cloudflared
+        group: cloudflared
+        mode: "0600"
+      no_log: true
+      notify: Restart cloudflared
+
+    - name: Install the systemd unit
+      ansible.builtin.template:
+        src: templates/cloudflared.service.j2
+        dest: /etc/systemd/system/cloudflared.service
+        mode: "0644"
+      notify: Restart cloudflared
+
+    - name: Start cloudflared now and at boot
+      ansible.builtin.systemd_service:
+        name: cloudflared
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart cloudflared
+      ansible.builtin.systemd_service:
+        name: cloudflared
+        state: restarted
+        daemon_reload: true

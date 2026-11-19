@@ -1,0 +1,99 @@
+---
+- name: Run the app as a service, deployed by CI and scripts/deploy-data.sh
+  hosts: rawi
+  become: true
+
+  tasks:
+    - name: Create the user the app runs as
+      ansible.builtin.user:
+        name: rawi
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    # Deploys write as deploy (GitHub Actions) or basel (data, from a laptop)
+    - name: Create the deploy user
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        shell: /bin/bash
+        create_home: true
+
+    - name: Let admins deploy too
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ deploy_user }}"
+        append: true
+      loop: "{{ admin_users }}"
+
+    - name: Install the deploy key
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ deploy_public_key }}"
+        exclusive: true
+
+    # Releases and data are owned by the deploy group and readable by all
+    - name: Create the release and data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "2775"
+      loop:
+        - /srv/rawi
+        - /srv/rawi/releases
+        - /srv/rawi/data
+
+    - name: Install the activate script
+      ansible.builtin.copy:
+        src: ../deploy/activate.sh
+        dest: /usr/local/bin/rawi-activate
+        mode: "0755"
+
+    - name: Let the deploy group restart the app and read its logs
+      community.general.sudoers:
+        name: rawi-deploy
+        group: "{{ deploy_user }}"
+        commands:
+          - /usr/bin/systemctl restart rawi
+          - /usr/bin/journalctl -u rawi -n 30 --no-pager
+        nopassword: true
+
+    - name: Create the config directory
+      ansible.builtin.file:
+        path: /etc/rawi
+        state: directory
+        mode: "0755"
+
+    - name: Write the app's environment
+      ansible.builtin.template:
+        src: templates/rawi.env.j2
+        dest: /etc/rawi/rawi.env
+        owner: root
+        group: rawi
+        mode: "0640"
+      notify: Restart the app
+
+    - name: Install the systemd unit
+      ansible.builtin.template:
+        src: templates/rawi.service.j2
+        dest: /etc/systemd/system/rawi.service
+        mode: "0644"
+      notify: Restart the app
+
+    # Started by the first deploy that finds a release and data in place
+    - name: Enable the app at boot
+      ansible.builtin.systemd_service:
+        name: rawi
+        enabled: true
+        daemon_reload: true
+
+  handlers:
+    # Not before the first deploy, when there's nothing to run yet
+    - name: Restart the app
+      ansible.builtin.shell: |
+        systemctl daemon-reload
+        if [ -e /srv/rawi/current ] && [ -e /srv/rawi/data/current ]; then
+          systemctl restart rawi
+        fi
+      changed_when: true

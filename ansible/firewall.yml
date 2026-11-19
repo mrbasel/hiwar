@@ -10,13 +10,20 @@
         state: present
 
     # Allowed before UFW is enabled, so enabling it can't cut off this run
-    - name: Allow SSH, HTTP and HTTPS
+    - name: Allow SSH
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    # The site is reached through Cloudflare Tunnel, which only connects out
+    - name: Close HTTP and HTTPS
       community.general.ufw:
         rule: allow
         port: "{{ item }}"
         proto: tcp
+        delete: true
       loop:
-        - "22"
         - "80"
         - "443"
 

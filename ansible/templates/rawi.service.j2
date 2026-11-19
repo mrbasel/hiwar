@@ -1,0 +1,37 @@
+[Unit]
+Description=rawi podcast search
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=rawi
+Group=rawi
+# The release and data deploys link in (see deploy/activate.sh).
+WorkingDirectory=/srv/rawi/current/api
+EnvironmentFile=/etc/rawi/rawi.env
+# A small young generation: V8 otherwise holds on to ~150 MB it isn't using.
+ExecStart=/usr/bin/node --max-semi-space-size=4 --max-old-space-size=128 dist/server.js
+Restart=on-failure
+RestartSec=5
+
+# ~200 MB of vectors plus the heap; above this it's swapping, not serving.
+MemoryHigh=500M
+MemoryMax=700M
+
+# The API only reads its files and talks to Workers AI.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

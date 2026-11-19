@@ -3,15 +3,6 @@
   hosts: rawi
   become: true
 
-  vars:
-    admin_users:
-      - name: basel
-        authorized_keys:
-          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKM/wIDXxx/t/28eQvTIymdNNOQsZllNR+criQXMLIP"
-      - name: ansible
-        authorized_keys:
-          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA1wtCByrpHlmTyuQtzFSq90KDiznsMh9Q4o3wCEkoxJ ansible-automation"
-
   tasks:
     - name: Ensure admin users exist
       ansible.builtin.user:
@@ -58,7 +49,7 @@
           PasswordAuthentication no
           KbdInteractiveAuthentication no
           PermitRootLogin no
-          AllowUsers {{ admin_users | map(attribute='name') | join(' ') }}
+          AllowUsers {{ (admin_users | map(attribute='name') | list + [deploy_user]) | join(' ') }}
         mode: "0644"
         validate: /usr/sbin/sshd -t -f %s
       notify: Restart SSH

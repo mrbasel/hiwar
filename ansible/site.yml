@@ -4,3 +4,12 @@
 
 - name: Configure UFW firewall
   ansible.builtin.import_playbook: firewall.yml
+
+- name: Prepare the server to run the app
+  ansible.builtin.import_playbook: base.yml
+
+- name: Run the app as a service
+  ansible.builtin.import_playbook: app.yml
+
+- name: Run the Cloudflare Tunnel connector
+  ansible.builtin.import_playbook: cloudflared.yml
