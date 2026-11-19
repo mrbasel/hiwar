@@ -1,0 +1,77 @@
+# Check, build and deploy the site to the rawi server on every push to main
+# that touches it. The release is built here (the API with its production
+# dependencies, and the frontend), uploaded to /srv/rawi/releases/<sha>, and
+# put live by rawi-activate (deploy/activate.sh), which rolls back if the API
+# doesn't come up healthy. Data is deployed separately, by scripts/deploy-data.sh.
+#
+# To roll back, run this workflow on an older commit (Actions > Deploy > Run
+# workflow), or on the server: rawi-activate release /srv/rawi/releases/<sha>
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "deploy/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+# One deploy at a time, and a newer push waits rather than cancelling one midway.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # DEPLOY_SSH_KEY (secret), DEPLOY_HOST and DEPLOY_KNOWN_HOSTS (variables)
+    environment:
+      name: production
+      url: https://podcasts.baselalnassr.com
+    steps:
+      - uses: actions/checkout@v7
+
+      # The version is package.json's packageManager.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm check
+
+      - run: pnpm build
+
+      # Without optional dependencies: transformers is only for the local
+      # embedder, and the server embeds queries with Workers AI.
+      - name: Bundle the release
+        run: |
+          pnpm --filter rawi-api deploy --legacy --prod --no-optional release/api
+          cp -r services/frontend/dist/client release/public
+
+      - name: Upload and activate the release
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh="ssh -i $HOME/.ssh/deploy -o IdentitiesOnly=yes"
+          dir=/srv/rawi/releases/$GITHUB_SHA
+          # Files unchanged since the live release are hard-linked, not sent.
+          rsync -a --delete --link-dest=/srv/rawi/current/ -e "$ssh" release/ "deploy@$DEPLOY_HOST:$dir/"
+          $ssh "deploy@$DEPLOY_HOST" rawi-activate release "$dir"
