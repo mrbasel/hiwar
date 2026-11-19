@@ -1,15 +1,9 @@
-import { episodeById, sectionsOfEpisode, segmentsOfEpisode, type UtteranceRow } from "../db/queries.js";
+import { episodeById, sectionsOfEpisode } from "../db/queries.js";
 import { link } from "../links.js";
 
 export function presentEpisode(id: string) {
   const e = episodeById(id);
   if (!e) return undefined;
-
-  const bySection = new Map<number, UtteranceRow[]>();
-  for (const seg of segmentsOfEpisode(id)) {
-    if (!bySection.has(seg.section_id)) bySection.set(seg.section_id, []);
-    bySection.get(seg.section_id)!.push(seg);
-  }
 
   return {
     episode: {
@@ -30,12 +24,12 @@ export function presentEpisode(id: string) {
       start: s.start_time,
       end: s.end_time,
       link: link(e.url, s.start_time),
-      segments: (bySection.get(s.id) ?? []).map((seg) => ({
+      segments: s.segments.map((seg) => ({
         idx: seg.idx,
         start: seg.start_time,
         link: link(e.url, seg.start_time),
         text: seg.text,
-        speaker_change: seg.speaker_change === 1,
+        speaker_change: seg.speaker_change,
       })),
     })),
   };

@@ -3,16 +3,21 @@ import { link } from "../links.js";
 import { words } from "../normalize.js";
 
 const MOMENTS_PER_RESULT = 3;
+const SNIPPET_WORDS = 24;
 const FALLBACK_SNIPPET_CHARS = 300;
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// Words at odd indexes, what's between them at even ones.
+function splitWords(text: string): string[] {
+  return text.split(/([\p{L}\p{N}\p{M}]+)/u);
+}
+
 export function highlight(text: string, terms: string[]): string {
   const set = new Set(terms);
-  return text
-    .split(/([\p{L}\p{N}\p{M}]+)/u)
+  return splitWords(text)
     .map((part, i) => {
       if (i % 2 === 0) return escapeHtml(part);
       const hit = set.has(words(part)[0] ?? "");
@@ -49,9 +54,30 @@ function findMoments(segments: Segment[], terms: string[], url: string) {
     });
 }
 
-// Semantic-only hits have no snippet and show the section start instead.
-export function presentHit(h: Hit, segs: Segment[], snippet: string | undefined, terms: string[]) {
-  const opening = segs.map((seg) => seg.text).join(" ").slice(0, FALLBACK_SNIPPET_CHARS);
+// The SNIPPET_WORDS words of the text with the most distinct terms in them,
+// highlighted, like FTS5's snippet(); undefined if no term is in the text.
+export function snippet(text: string, terms: string[]): string | undefined {
+  const parts = splitWords(text);
+  const termOf = (n: number) => terms.indexOf(words(parts[2 * n + 1])[0] ?? "");
+  const found = Array.from({ length: (parts.length - 1) / 2 }, (_, n) => termOf(n));
+  let best = -1, bestCount = 0;
+  for (let start = 0; start < found.length; start++) {
+    if (found[start] < 0) continue; // windows start at a term
+    const count = new Set(found.slice(start, start + SNIPPET_WORDS).filter((t) => t >= 0)).size;
+    if (count > bestCount) [best, bestCount] = [start, count];
+  }
+  if (best < 0) return undefined;
+  // Start a few words early, so the first term has some context.
+  const first = Math.max(0, Math.min(best - 4, found.length - SNIPPET_WORDS));
+  const last = Math.min(found.length, first + SNIPPET_WORDS);
+  const html = highlight(parts.slice(2 * first + 1, 2 * last).join(""), terms);
+  return `${first > 0 ? "…" : ""}${html}${last < found.length ? "…" : ""}`;
+}
+
+// Hits without query words in their text show the section start instead.
+export function presentHit(h: Hit, segs: Segment[], terms: string[]) {
+  const text = segs.map((seg) => seg.text).join(" ");
+  const opening = text.slice(0, FALLBACK_SNIPPET_CHARS);
   return {
     section: {
       id: h.id,
@@ -75,12 +101,7 @@ export function presentHit(h: Hit, segs: Segment[], snippet: string | undefined,
       description_html: highlight((h.description ?? "").replace(/\s*\n\s*/g, "\n").trim(), terms),
     },
     score: h.score,
-    snippet:
-      snippet !== undefined
-        ? escapeHtml(snippet).replace(/\x02/g, "<mark>").replace(/\x03/g, "</mark>")
-        : opening
-          ? `${escapeHtml(opening)}…`
-          : "",
+    snippet: snippet(text, terms) ?? (opening ? `${escapeHtml(opening)}…` : ""),
     moments: findMoments(segs, terms, h.url),
   };
 }

@@ -1,18 +1,16 @@
-// Search over the embeddings `pipeline.embed` writes, all held in memory.
-// Unfiltered searches go through the HNSW index `pipeline.hnsw` saves next to
-// map.json; filtered searches compare the query with each doc that passes.
+// Search over the vectors `pipeline.export` writes, all held in memory: each
+// doc's sign bits find the nearest few by Hamming distance, and their int8
+// vectors rescore those against the query.
 
-import fs from "node:fs";
-import path from "node:path";
-import { env, pipeline } from "@huggingface/transformers";
-import { Index as Hnsw, MetricKind, ScalarKind } from "usearch";
 import { db } from "../db/connection.js";
 
 const API = "https://openrouter.ai/api/v1/embeddings";
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4/accounts";
 const TIMEOUT_MS = 5000;
 const CACHED_QUERIES = 1000;
-const HNSW_CANDIDATES = 1600;
+// Docs rescored per doc wanted: more finds more of the exact top docs, slower.
+const RESCORED_PER_DOC = 20;
+const MIN_RESCORED = 4000;
 // ONNX versions of the indexed models; fp32 matches OpenRouter's vectors.
 const LOCAL_MODELS: Record<string, string> = { "baai/bge-m3": "Xenova/bge-m3" };
 // Workers AI versions of the indexed models; bge-m3's match OpenRouter's vectors.
@@ -31,15 +29,15 @@ const queryCache = new Map<string, Float32Array>();
 export interface Index {
   model: string;
   dims: number;
-  vectors: Float32Array; // row-major, one unit-length row per doc
+  bits: Uint32Array; // row-major, dims / 32 words per doc; bit j set if dimension j > 0
+  int8: Int8Array; // row-major, one row per doc; the vector is about row * scale
+  scales: Float32Array;
   sections: Int32Array; // the section each doc opens
   channels: string[];
   episodes: string[];
   dates: string[];
   chapterDocs: Uint32Array;
   episodeDoc: Map<string, number>; // episode id to its own doc
-  hnsw?: Hnsw; // keyed by the table's ids
-  rows: Map<number, number>; // table id to doc
 }
 
 export interface DocFilter {
@@ -48,83 +46,72 @@ export interface DocFilter {
   endDate?: string;
 }
 
-// Docs without a section are left out, since a hit on them can't be shown.
-export function loadIndex(model: string, embeddingsDir: string): Index | undefined {
-  const known = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'embedding_models'").get();
-  const row = known && db.prepare("SELECT table_name FROM embedding_models WHERE model = ?").get(model);
-  if (!row) return undefined;
-  const from = `FROM ${row.table_name} WHERE section_id IS NOT NULL`;
-  const count = db.prepare(`SELECT count(*) AS n, max(length(vector)) AS bytes ${from}`).get() as {
+export function loadIndex(model: string): Index | undefined {
+  const known = db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'vectors'").get();
+  const info = db.prepare("SELECT value FROM build_info WHERE key = 'model'").get();
+  if (!known || !info || JSON.parse(info.value as string) !== model) return undefined;
+  const count = db.prepare("SELECT count(*) AS n, max(length(int8)) AS dims FROM vectors").get() as {
     n: number;
-    bytes: number;
+    dims: number;
   };
-  const dims = count.bytes / 2; // float16
-  if (dims % 4) throw new Error(`${row.table_name}: ${dims} dimensions, not a multiple of 4`);
+  const dims = count.dims;
+  if (dims % 32) throw new Error(`vectors: ${dims} dimensions, not a multiple of 32`);
   const index: Index = {
     model,
     dims,
-    vectors: new Float32Array(count.n * dims),
+    bits: new Uint32Array((count.n * dims) / 32),
+    int8: new Int8Array(count.n * dims),
+    scales: new Float32Array(count.n),
     sections: new Int32Array(count.n),
     channels: [],
     episodes: [],
     dates: [],
     chapterDocs: new Uint32Array(),
     episodeDoc: new Map(),
-    rows: new Map(),
   };
   const rows = db
     .prepare(
-      `SELECT t.id, t.kind, t.episode_id, t.channel_id, t.section_id, t.vector, e.date
-       FROM ${row.table_name} t LEFT JOIN episodes e ON e.id = t.episode_id
-       WHERE t.section_id IS NOT NULL ORDER BY t.id`,
+      `SELECT v.kind, v.episode_id, v.channel_id, v.section_id, v.bits, v.int8, v.scale, e.date
+       FROM vectors v LEFT JOIN episodes e ON e.id = v.episode_id ORDER BY v.id`,
     )
     .iterate() as Iterable<{
-    id: number;
     kind: string;
     episode_id: string;
     channel_id: string;
     section_id: number;
-    vector: Uint8Array;
+    bits: Uint8Array;
+    int8: Uint8Array;
+    scale: number;
     date: string | null;
   }>;
+  const bitBytes = new Uint8Array(index.bits.buffer);
+  const int8Bytes = new Uint8Array(index.int8.buffer);
+  // Repeated ids and dates share one string each.
+  const strings = new Map<string, string>();
+  const intern = (s: string) => strings.get(s) ?? (strings.set(s, s), s);
   const chapters: number[] = [];
   let i = 0;
   for (const r of rows) {
-    const bytes = r.vector.slice(); // its own buffer, so float16 reads are aligned
-    index.vectors.set(new Float16Array(bytes.buffer, 0, dims), i * dims);
+    bitBytes.set(r.bits, (i * dims) / 8);
+    int8Bytes.set(r.int8, i * dims);
+    index.scales[i] = r.scale;
     index.sections[i] = r.section_id;
-    index.channels.push(r.channel_id);
-    index.episodes.push(r.episode_id);
-    index.dates.push(r.date ?? "");
+    index.channels.push(intern(r.channel_id));
+    index.episodes.push(intern(r.episode_id));
+    index.dates.push(intern(r.date ?? ""));
     if (r.kind === "chapter") chapters.push(i);
     else index.episodeDoc.set(r.episode_id, i);
-    index.rows.set(r.id, i);
     i++;
   }
   index.chapterDocs = Uint32Array.from(chapters);
-  index.hnsw = loadHnsw(path.join(embeddingsDir, "hnsw.usearch"), row.table_name as string, dims);
   return index;
-}
-
-function loadHnsw(file: string, table: string, dims: number): Hnsw | undefined {
-  if (!fs.existsSync(file)) {
-    console.warn(`no HNSW index at ${file}: semantic search scans every doc`);
-    return undefined;
-  }
-  const hnsw = new Hnsw(dims, MetricKind.IP, ScalarKind.F16);
-  hnsw.view(file);
-  const ids = db.prepare(`SELECT id FROM ${table}`).all().map((r) => BigInt(r.id as number));
-  const held = hnsw.contains(BigUint64Array.from(ids)) as boolean[];
-  if (hnsw.size() !== ids.length || !held.every(Boolean)) {
-    console.warn(`${file} is out of date with ${table}: semantic search scans every doc (run pipeline.embed)`);
-    return undefined;
-  }
-  return hnsw;
 }
 
 export async function localEmbedder(model: string, cacheDir: string): Promise<Embedder> {
   const onnx = LOCAL_MODELS[model];
   if (!onnx) throw new Error(`no local version of ${model}`);
+  // Imported here, so servers using an API don't load onnxruntime.
+  const { env, pipeline } = await import("@huggingface/transformers");
   env.cacheDir = cacheDir;
   const extract = await pipeline("feature-extraction", onnx, { dtype: "fp32" });
   return async (query) => {
@@ -178,29 +165,58 @@ async function embedQuery(embed: Embedder, query: string): Promise<Float32Array>
   return vector;
 }
 
-export function dotProducts(vectors: Float32Array, dims: number, docs: Uint32Array, q: Float32Array): Float32Array {
-  const scores = new Float32Array(docs.length);
-  for (let n = 0; n < docs.length; n++) {
-    // four sums: about twice as fast as one
-    let a = 0, b = 0, c = 0, d = 0;
-    for (let row = docs[n] * dims, j = 0; j < dims; j += 4) {
-      a += vectors[row + j] * q[j];
-      b += vectors[row + j + 1] * q[j + 1];
-      c += vectors[row + j + 2] * q[j + 2];
-      d += vectors[row + j + 3] * q[j + 3];
-    }
-    scores[n] = a + b + c + d;
-  }
-  return scores;
+// A doc's own vector, to search with.
+export function docVector(index: Index, doc: number): Float32Array {
+  const { int8, dims, scales } = index;
+  return Float32Array.from(int8.subarray(doc * dims, (doc + 1) * dims), (x) => x * scales[doc]);
 }
 
-export function best(scores: Float32Array, m: number): Uint32Array {
-  const order = Uint32Array.from(scores.keys());
-  if (m < scores.length) {
-    const threshold = Float32Array.from(scores).sort()[scores.length - m];
-    return order.filter((n) => scores[n] >= threshold).sort((a, b) => scores[b] - scores[a]);
+function popcount(x: number): number {
+  x -= (x >>> 1) & 0x55555555;
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  return Math.imul((x + (x >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24;
+}
+
+// The docs nearest q by Hamming distance between sign bits: at least n of
+// them, more where distances tie.
+function nearestByBits(index: Index, docs: Uint32Array, q: Float32Array, n: number): Uint32Array {
+  const { bits, dims } = index;
+  const words = dims / 32;
+  const qbits = new Uint32Array(words);
+  for (let j = 0; j < dims; j++) if (q[j] > 0) qbits[j >>> 5] |= 1 << (j & 31);
+  if (n >= docs.length) return docs;
+
+  const distances = new Uint16Array(docs.length);
+  const counts = new Uint32Array(dims + 1);
+  for (let i = 0; i < docs.length; i++) {
+    let d = 0;
+    for (let row = docs[i] * words, w = 0; w < words; w++) d += popcount(bits[row + w] ^ qbits[w]);
+    distances[i] = d;
+    counts[d]++;
   }
-  return order.sort((a, b) => scores[b] - scores[a]);
+  let threshold = 0;
+  for (let total = counts[0]; total < n; total += counts[++threshold]);
+  return docs.filter((_, i) => distances[i] <= threshold);
+}
+
+// The best m of docs by their int8 vectors' dot product with q, best first,
+// out of the ones nearest by bits.
+export function ranked(index: Index, docs: Uint32Array, q: Float32Array, m: number): Uint32Array {
+  const { int8, dims, scales } = index;
+  const candidates = nearestByBits(index, docs, q, Math.max(m * RESCORED_PER_DOC, MIN_RESCORED));
+  const scores = new Float32Array(int8.length / dims);
+  for (const doc of candidates) {
+    // four sums: about twice as fast as one
+    let a = 0, b = 0, c = 0, d = 0;
+    for (let row = doc * dims, j = 0; j < dims; j += 4) {
+      a += int8[row + j] * q[j];
+      b += int8[row + j + 1] * q[j + 1];
+      c += int8[row + j + 2] * q[j + 2];
+      d += int8[row + j + 3] * q[j + 3];
+    }
+    scores[doc] = (a + b + c + d) * scales[doc];
+  }
+  return candidates.sort((x, y) => scores[y] - scores[x]).subarray(0, m);
 }
 
 export async function semanticSearch(
@@ -212,25 +228,20 @@ export async function semanticSearch(
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);
   const { channels, startDate, endDate } = filter;
-  if (index.hnsw && !channels && !startDate && !endDate) {
-    const ids = hnswSearch(index, index.hnsw, q, k);
-    if (ids.length === k) return ids;
-  }
-  const { vectors, dims, sections } = index;
+  const { sections } = index;
   let docs = Uint32Array.from(sections.keys());
   if (channels) docs = docs.filter((i) => channels.has(index.channels[i]));
   if (startDate) docs = docs.filter((i) => index.dates[i] >= startDate);
   if (endDate) docs = docs.filter((i) => index.dates[i] <= endDate);
-  const scores = dotProducts(vectors, dims, docs, q);
 
   // Several docs can open the same section, so take the best few times k
   // and widen until they cover k sections.
   for (let m = k * 4; ; m *= 4) {
-    const top = best(scores, m);
+    const top = ranked(index, docs, q, m);
     const ids: number[] = [];
     const seen = new Set<number>();
-    for (const n of top) {
-      const id = sections[docs[n]];
+    for (const doc of top) {
+      const id = sections[doc];
       if (seen.has(id)) continue;
       seen.add(id);
       ids.push(id);
@@ -238,20 +249,4 @@ export async function semanticSearch(
     }
     if (top.length === docs.length) return ids;
   }
-}
-
-// Fewer than k sections if the candidates don't cover that many.
-function hnswSearch(index: Index, hnsw: Hnsw, q: Float32Array, k: number): number[] {
-  const ids: number[] = [];
-  const seen = new Set<number>();
-  for (const key of hnsw.search(q, HNSW_CANDIDATES, 1).keys) {
-    const doc = index.rows.get(Number(key));
-    if (doc === undefined) continue; // no section
-    const id = index.sections[doc];
-    if (seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-    if (ids.length === k) break;
-  }
-  return ids;
 }

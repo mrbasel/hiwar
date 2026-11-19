@@ -42,9 +42,9 @@ def semantic_bge_m3(conn, query, k):
     return semantic.search(conn, query, k, "baai/bge-m3")
 
 
-def semantic_bge_m3_hnsw(conn, query, k):
-    """semantic_bge_m3 through the HNSW index, as the site searches every channel."""
-    return semantic.search(conn, query, k, "baai/bge-m3", hnsw=True)
+def semantic_bge_m3_quantized(conn, query, k):
+    """semantic_bge_m3 over sign bits rescored with int8 vectors, as the site searches."""
+    return semantic.search(conn, query, k, "baai/bge-m3", quantized=True)
 
 
 RRF_K = 60  # the usual constant; larger flattens the gap between ranks
@@ -69,15 +69,15 @@ def hybrid_bge_m3(conn, query, k):
     return rrf([bm25(conn, query, RRF_DEPTH), semantic_bge_m3(conn, query, RRF_DEPTH)], k)
 
 
-def hybrid_bge_m3_hnsw(conn, query, k):
-    """BM25 and semantic_bge_m3_hnsw, fused with RRF."""
-    return rrf([bm25(conn, query, RRF_DEPTH), semantic_bge_m3_hnsw(conn, query, RRF_DEPTH)], k)
+def hybrid_bge_m3_quantized(conn, query, k):
+    """BM25 and semantic_bge_m3_quantized, fused with RRF: what the site serves."""
+    return rrf([bm25(conn, query, RRF_DEPTH), semantic_bge_m3_quantized(conn, query, RRF_DEPTH)], k)
 
 
 METHODS = {
     "bm25": bm25,
     "semantic_bge_m3": semantic_bge_m3,
     "hybrid_bge_m3": hybrid_bge_m3,
-    "semantic_bge_m3_hnsw": semantic_bge_m3_hnsw,
-    "hybrid_bge_m3_hnsw": hybrid_bge_m3_hnsw,
+    "semantic_bge_m3_quantized": semantic_bge_m3_quantized,
+    "hybrid_bge_m3_quantized": hybrid_bge_m3_quantized,
 }

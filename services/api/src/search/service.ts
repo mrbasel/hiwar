@@ -129,7 +129,6 @@ async function hybridSearch(params: SearchParams, semantic: Semantic) {
 
 function hydrate(hits: Hit[], parsed: ParsedQuery) {
   const ids = hits.map((h) => h.id);
-  const snippets = ids.length ? queries.snippets(parsed.match, ids) : new Map<number, string>();
   const segments = ids.length ? queries.segmentsBySection(ids) : new Map<number, Segment[]>();
-  return hits.map((h) => presentHit(h, segments.get(h.id) ?? [], snippets.get(h.id), parsed.terms));
+  return hits.map((h) => presentHit(h, segments.get(h.id) ?? [], parsed.terms));
 }

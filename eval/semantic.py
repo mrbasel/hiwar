@@ -1,8 +1,9 @@
 """Semantic search over the documents `pipeline.embed` keeps in the database.
 
 Brute force: the query vector against every document vector, held in memory;
-or, with hnsw=True, the documents the HNSW index (pipeline.hnsw) finds, as the
-site does for searches over every channel. Results are sections, like the
+or, with quantized=True, as the site searches (services/api/src/search/semantic.ts):
+the documents nearest by the Hamming distance of their sign bits, rescored
+with int8 vectors (see pipeline.export). Results are sections, like the
 other methods: each document is stored with the section a hit on it opens, a
 chapter's the section that overlaps it most and an episode's its first section.
 
@@ -15,11 +16,13 @@ from functools import cache
 
 import numpy as np
 
-from pipeline import hnsw as hnsw_index
-from pipeline.embed import index_path, out_dir
+from pipeline.embed import out_dir
+from pipeline.export import quantize
 from pipeline.openrouter import api_key, embed
 
-HNSW_CANDIDATES = 1600  # as in services/api/src/search/semantic.ts
+# As in services/api/src/search/semantic.ts.
+RESCORED_PER_DOC = 20
+MIN_RESCORED = 4000
 
 
 @cache
@@ -34,12 +37,10 @@ def load(conn, model):
 
 
 @cache
-def load_hnsw(conn, model):
-    table = conn.execute("SELECT table_name FROM embedding_models WHERE model = ?", (model,)).fetchone()[0]
-    index = hnsw_index.load(index_path(model))
-    if not hnsw_index.is_current(index, hnsw_index.table_ids(conn, table)):
-        raise SystemExit(f"{index_path(model)} is missing or out of date; run pipeline.embed")
-    return index
+def load_quantized(conn, model):
+    vectors = load(conn, model)[0]
+    _, int8, scales = quantize(vectors)
+    return vectors > 0, int8.astype(np.float32) * scales[:, None]
 
 
 @cache
@@ -61,13 +62,18 @@ def embed_query(model, query):
     return cached[query]
 
 
-def search(conn, query, k, model, hnsw=False):
-    vectors, kinds, sections, positions = load(conn, model)
+def search(conn, query, k, model, quantized=False):
+    vectors, kinds, sections, _ = load(conn, model)
     q = embed_query(model, query)
-    if hnsw:
-        keys = load_hnsw(conn, model).search(q, HNSW_CANDIDATES).keys
-        order = [positions[key] for key in keys.tolist() if key in positions]
-        scores = dict(zip(order, (vectors[order] @ q).tolist()))
+    if quantized:
+        # The site takes 4k docs (k sections) and widens if they cover fewer; at
+        # this depth they always cover them.
+        signs, rescored = load_quantized(conn, model)
+        n = max(4 * k * RESCORED_PER_DOC, MIN_RESCORED)
+        distances = (signs != (q > 0)).sum(axis=1)
+        candidates = np.flatnonzero(distances <= np.sort(distances)[n - 1])
+        scores = dict(zip(candidates.tolist(), (rescored[candidates] @ q).tolist()))
+        order = sorted(scores, key=scores.get, reverse=True)
     else:
         scores = vectors @ q
         order = np.argsort(-scores)

@@ -18,14 +18,13 @@ async function loadSemantic(): Promise<Semantic | undefined> {
   }
 
   let started = performance.now();
-  const index = loadIndex(config.embeddingModel, config.embeddingsDir);
+  const index = loadIndex(config.embeddingModel);
   if (!index) {
-    console.warn(`no ${config.embeddingModel} embeddings in ${config.dbPath}: BM25 search only`);
+    console.warn(`no ${config.embeddingModel} vectors in ${config.dbPath}: BM25 search only`);
     return undefined;
   }
   console.log(
-    `loaded ${index.sections.length} embeddings (${index.model}${index.hnsw ? ", HNSW" : ""})` +
-      ` in ${Math.round(performance.now() - started)} ms`,
+    `loaded ${index.sections.length} vectors (${index.model}) in ${Math.round(performance.now() - started)} ms`,
   );
 
   if (config.queryEmbedder === "openrouter") {

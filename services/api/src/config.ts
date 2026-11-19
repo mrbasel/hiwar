@@ -7,9 +7,10 @@ if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 export const config = {
   dev: process.env.NODE_ENV === "development",
-  dbPath: process.env.DB_PATH ?? path.join(ROOT, "podcasts.db"),
+  // podcasts.db as `pipeline.export` cuts it down for the site.
+  dbPath: process.env.DB_PATH ?? path.join(ROOT, "serve.db"),
   embeddingModel: process.env.EMBEDDING_MODEL ?? "baai/bge-m3",
-  // For map.json and the HNSW index (hnsw.usearch).
+  // For map.json.
   embeddingsDir: process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3"),
   // Local model, downloaded on first start (~2.3 GB).
   modelsDir: process.env.MODELS_DIR ?? path.join(ROOT, "models"),

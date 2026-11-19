@@ -11,9 +11,7 @@ Both go in one table in the database, embeddings_<model name>
 (embeddings_bge_m3 for baai/bge-m3), one row per document: its unit-length
 vector as float16, its channel, and the section a hit on it opens. A chapter's
 is the section that overlaps it most, an episode's its first section; NULL if
-there's none. Searches load the whole table into memory: unfiltered ones go
-through an HNSW index of it (see pipeline.hnsw), rebuilt at the end of every
-run that changed the table, and ones limited to some channels scan their rows.
+there's none. The site searches them quantized, from pipeline.export.
 `embedding_models` records each model's table and the build it was last
 brought up to date with.
 
@@ -34,7 +32,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import hnsw
 from .openrouter import api_key, embed
 
 ROOT = Path(__file__).parent.parent / "embeddings"
@@ -59,10 +56,6 @@ CREATE TABLE IF NOT EXISTS {table} (
 
 def out_dir(model):
     return ROOT / model.split("/")[-1]
-
-
-def index_path(model):
-    return out_dir(model) / "hnsw.usearch"
 
 
 def table_name(model):
@@ -182,7 +175,6 @@ def main():
     conn.execute("INSERT OR REPLACE INTO embedding_models VALUES (?, ?, ?)", (args.model, table, built_at))
     conn.commit()
     print(f"{table}: {conn.execute(f'SELECT count(*) FROM {table}').fetchone()[0]} documents")
-    hnsw.build(conn, table, index_path(args.model))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import { semantic } from "../bootstrap.js";
 import { episodesByIds } from "../db/queries.js";
-import { best, dotProducts, type Index } from "../search/semantic.js";
+import { docVector, ranked, type Index } from "../search/semantic.js";
 
 const COUNT = 8;
 const PER_CHANNEL = 3;
@@ -23,18 +23,16 @@ export function recommendations(id: string) {
 function similarEpisodes(index: Index, id: string, k: number): string[] {
   const doc = index.episodeDoc.get(id);
   if (doc === undefined) return [];
-  const { vectors, dims, chapterDocs, episodes, channels } = index;
-  const q = vectors.subarray(doc * dims, (doc + 1) * dims);
-  const scores = dotProducts(vectors, dims, chapterDocs, q);
+  const { chapterDocs, episodes, channels } = index;
+  const q = docVector(index, doc);
 
   // Widen until the top chapters cover k episodes.
   for (let m = k * 16; ; m *= 4) {
-    const top = best(scores, m);
+    const top = ranked(index, chapterDocs, q, m);
     const ids: string[] = [];
     const seen = new Set([id]);
     const perChannel = new Map<string, number>();
-    for (const n of top) {
-      const chapter = chapterDocs[n];
+    for (const chapter of top) {
       const episode = episodes[chapter];
       if (seen.has(episode)) continue;
       seen.add(episode);

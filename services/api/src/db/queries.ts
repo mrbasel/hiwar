@@ -1,3 +1,4 @@
+import { inflateSync } from "node:zlib";
 import { db } from "./connection.js";
 
 // BM25 weights: heading, transcript.
@@ -23,16 +24,11 @@ export interface Hit {
 }
 
 export interface Segment {
-  section_id: number;
   idx: number;
   start_time: number;
   end_time: number;
   text: string;
-}
-
-interface Snippet {
-  id: number;
-  snippet: string;
+  speaker_change: boolean;
 }
 
 function placeholders(n: number): string {
@@ -121,31 +117,24 @@ export function hitsByIds(ids: number[]): Hit[] {
     .all(...ids) as unknown as Hit[];
 }
 
-// Matching words are between \x02 and \x03. Only for a page, so snippet()
-// doesn't run on every match.
-export function snippets(match: string, ids: number[]): Map<number, string> {
-  const rows = db
-    .prepare(
-      `SELECT rowid AS id, snippet(sections_fts, 1, char(2), char(3), '…', 24) AS snippet
-       FROM sections_fts WHERE sections_fts MATCH ? AND rowid IN (${placeholders(ids.length)})`,
-    )
-    .all(match, ...ids) as unknown as Snippet[];
-  return new Map(rows.map((r) => [r.id, r.snippet]));
+// A section's segments, stored as zlib-compressed JSON (see pipeline/export.py).
+function decodeSegments(blob: Uint8Array | null): Segment[] {
+  if (!blob) return [];
+  const rows = JSON.parse(inflateSync(blob).toString()) as [number, number, number, string, number][];
+  return rows.map(([idx, start_time, end_time, text, speaker_change]) => ({
+    idx,
+    start_time,
+    end_time,
+    text,
+    speaker_change: speaker_change === 1,
+  }));
 }
 
 export function segmentsBySection(ids: number[]): Map<number, Segment[]> {
-  const segs = db
-    .prepare(
-      `SELECT section_id, idx, start_time, end_time, text
-       FROM segments WHERE section_id IN (${placeholders(ids.length)}) ORDER BY section_id, idx`,
-    )
-    .all(...ids) as unknown as Segment[];
-  const bySection = new Map<number, Segment[]>();
-  for (const seg of segs) {
-    if (!bySection.has(seg.section_id)) bySection.set(seg.section_id, []);
-    bySection.get(seg.section_id)!.push(seg);
-  }
-  return bySection;
+  const rows = db
+    .prepare(`SELECT id, segments FROM sections WHERE id IN (${placeholders(ids.length)})`)
+    .all(...ids) as { id: number; segments: Uint8Array | null }[];
+  return new Map(rows.map((r) => [r.id, decodeSegments(r.segments)]));
 }
 
 export function listShows() {
@@ -178,10 +167,7 @@ export interface SectionRow {
   title: string | null;
   start_time: number;
   end_time: number;
-}
-
-export interface UtteranceRow extends Segment {
-  speaker_change: number | null;
+  segments: Segment[];
 }
 
 export function episodeById(id: string): EpisodeRow | undefined {
@@ -214,16 +200,8 @@ export function episodesByIds(ids: string[]): EpisodeSummary[] {
 }
 
 export function sectionsOfEpisode(id: string): SectionRow[] {
-  return db
-    .prepare(`SELECT id, idx, title, start_time, end_time FROM sections WHERE episode_id = ? ORDER BY idx`)
-    .all(id) as unknown as SectionRow[];
-}
-
-export function segmentsOfEpisode(id: string): UtteranceRow[] {
-  return db
-    .prepare(
-      `SELECT section_id, idx, start_time, end_time, text, speaker_change
-       FROM segments WHERE episode_id = ? ORDER BY idx`,
-    )
-    .all(id) as unknown as UtteranceRow[];
+  const rows = db
+    .prepare(`SELECT id, idx, title, start_time, end_time, segments FROM sections WHERE episode_id = ? ORDER BY idx`)
+    .all(id) as unknown as (Omit<SectionRow, "segments"> & { segments: Uint8Array | null })[];
+  return rows.map((r) => ({ ...r, segments: decodeSegments(r.segments) }));
 }
