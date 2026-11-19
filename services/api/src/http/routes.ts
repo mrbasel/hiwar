@@ -2,8 +2,9 @@ import express from "express";
 import { rateLimit } from "express-rate-limit";
 import fs from "node:fs";
 import path from "node:path";
+import { semantic } from "../bootstrap.js";
 import { config } from "../config.js";
-import { episodeById, listShows } from "../db/queries.js";
+import { episodeById, exportedAt, listShows } from "../db/queries.js";
 import { presentEpisode } from "../episodes/present.js";
 import { recommendations } from "../episodes/recommend.js";
 import { QueryError, search, type SearchParams } from "../search/service.js";
@@ -40,6 +41,11 @@ api.get("/search", limit(30), async (req, res) => {
     if (err instanceof QueryError) res.status(400).json({ error: err.message });
     else throw err;
   }
+});
+
+// For deploys: which export is served, and whether semantic search loaded.
+api.get("/health", (_req, res) => {
+  res.json({ status: "ok", exported_at: exportedAt(), semantic: semantic !== undefined });
 });
 
 api.get("/shows", (_req, res) => {
