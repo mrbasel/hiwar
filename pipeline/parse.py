@@ -4,6 +4,10 @@ Human captions (`.ar.json3`) are preferred over auto captions (`.ar-orig.json3`)
 Tracks that aren't mostly Arabic are ignored (some tracks labeled `ar` are
 actually English). Speaker changes become a `>>` mark in the text: human
 captions already have it, auto captions flag the word with `isSpeakerChange`.
+
+The files are read by `read_info` and `find_transcript`; `episode_info` and
+`pick_transcript` do the same with their contents, for episodes uploaded
+to the server rather than read from data/.
 """
 
 import json
@@ -13,6 +17,9 @@ from pathlib import Path
 TRANSCRIPT_SOURCES = [("ar", "human"), ("ar-orig", "auto")]
 MIN_ARABIC_RATIO = 0.8
 LAST_WORD_S = 0.3  # rough length of a line's last word, when only word starts are known
+# The parts of an info.json that episode_info reads.
+INFO_KEYS = ("id", "channel_id", "channel", "uploader", "uploader_id", "channel_url", "title",
+             "upload_date", "webpage_url", "duration", "description", "chapters")
 
 
 def base_of(info_path):
@@ -22,10 +29,13 @@ def base_of(info_path):
 def read_info(info_path):
     """Episode metadata."""
     info_path = Path(info_path)
-    base = base_of(info_path)
     info = json.loads(info_path.read_text(encoding="utf-8"))
+    return {**episode_info(info, info_path.parent.name), "path": str(base_of(info_path))}
+
+
+def episode_info(info, folder):
+    """Episode metadata from an info.json's contents and the folder it was downloaded to."""
     date = info.get("upload_date") or ""
-    folder = info_path.parent.name
     channel = info.get("channel") or info.get("uploader") or info.get("uploader_id")
     return {
         "id": info["id"],
@@ -44,7 +54,6 @@ def read_info(info_path):
             {"title": c["title"], "start": c["start_time"], "end": c["end_time"]}
             for c in info.get("chapters") or []
         ],
-        "path": str(base),
     }
 
 
@@ -58,18 +67,29 @@ def is_arabic(segments):
 def find_transcript(base):
     """(segments, source) from the best Arabic track, or (None, None)."""
     base = Path(base)
-    for suffix, source in TRANSCRIPT_SOURCES:
+
+    def load(suffix):
         path = base.with_name(f"{base.name}.{suffix}.json3")
-        if not path.exists():
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    return pick_transcript(load)
+
+
+def pick_transcript(load):
+    """Same as find_transcript, with `load(suffix)` giving a track's json3 contents or None."""
+    for suffix, source in TRANSCRIPT_SOURCES:
+        track = load(suffix)
+        if track is None:
             continue
-        segments = read_segments(path)
+        segments = caption_segments(track)
         if segments and is_arabic(segments):
             return segments, source
     return None, None
 
 
-def read_segments(path):
-    events = json.loads(Path(path).read_text(encoding="utf-8"))["events"]
+def caption_segments(track):
+    """Timed lines of a json3 track."""
+    events = track["events"]
     segments = []
     for event in events:
         parts = event.get("segs") or []

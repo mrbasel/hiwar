@@ -22,10 +22,9 @@ import sys
 from collections import Counter, defaultdict
 
 from . import db
-from .clean import clean_segments, episode_keys, find_boilerplate, ngram_hashes
+from .clean import episode_keys, find_boilerplate, ngram_hashes
+from .episode import make_sections
 from .parse import find_transcript, read_info
-from .sections import build_sections, title_sections
-from .utterances import merge_lines
 
 
 def log(msg):
@@ -66,16 +65,8 @@ def process_channel(task):
             stats["unreadable"] += 1
             errors.append(f"{path}: {e!r}")
             continue
-        removed, reason = 0, None
-        if segments is None:
-            sections, reason = [], "no Arabic transcript"
-        else:
-            segments, removed = clean_segments(segments, boilerplate)
-            sections = build_sections(merge_lines(segments), ep["chapters"])
-            if not sections:
-                reason = "empty after cleaning"
+        sections, source, removed, reason = make_sections(ep, segments, source, boilerplate)
         if reason:
-            sections, source = title_sections(ep["chapters"], ep["duration"]), None
             stats["title_only"] += 1
         else:
             stats[f"source_{source}"] += 1

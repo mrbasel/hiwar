@@ -24,7 +24,6 @@ Runs take scripts/update.sh's lock, so the two never write at once.
 
 import argparse
 import fcntl
-import hashlib
 import json
 import re
 import sqlite3
@@ -32,11 +31,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from .episode import episode_docs
 from .openrouter import api_key, embed
 
 ROOT = Path(__file__).parent.parent / "embeddings"
 LOCK = Path(__file__).parent.parent / "logs/update/.lock"
-MAX_CHARS = 6000  # well inside the model's context, even for Arabic
 BATCH = 64
 
 TABLE = """
@@ -65,21 +64,13 @@ def table_name(model):
 def build_docs(conn, limit=None):
     docs = []
     rows = conn.execute(
-        "SELECT id, coalesce(channel_id, ''), title, description, chapters, duration FROM episodes ORDER BY id"
+        "SELECT id, channel_id, title, description, chapters, duration FROM episodes ORDER BY id"
         + (f" LIMIT {int(limit)}" if limit else "")
     )
     for episode_id, channel_id, title, description, chapters, duration in rows:
-        title = title or ""
-        chapters = json.loads(chapters or "[]")
-        text = "\n".join([title, description or "", *(c["title"] for c in chapters)])
-        docs.append({"kind": "episode", "episode_id": episode_id, "channel_id": channel_id,
-                     "start": 0, "end": duration, "text": text.strip()[:MAX_CHARS]})
-        for c in chapters:
-            docs.append({"kind": "chapter", "episode_id": episode_id, "channel_id": channel_id,
-                         "start": c["start"], "end": c["end"], "text": f"{title} | {c['title']}"})
-    for d in docs:
-        key = json.dumps([d["kind"], d["episode_id"], d["start"], d["end"], d["text"]], ensure_ascii=False)
-        d["hash"] = hashlib.sha1(key.encode()).hexdigest()
+        docs += episode_docs({"id": episode_id, "channel_id": channel_id, "title": title,
+                              "description": description, "chapters": json.loads(chapters or "[]"),
+                              "duration": duration})
     return docs
 
 

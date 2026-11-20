@@ -161,6 +161,16 @@ def insert_channel(conn, channel):
     )
 
 
+def section_norms(episode_title, section):
+    """(heading_norm, text_norm) of a section, as the full-text index sees it."""
+    return normalize(f"{episode_title or ''} | {section['title']}"), normalize(section["text"])
+
+
+def utterance(seg):
+    """(text, speaker_change) of a segment, its `>>` marks turned into the flag."""
+    return re.sub(r"\s*>>\s*", " ", seg["text"]).strip(), int(seg["text"].startswith(">>"))
+
+
 def insert_episode(conn, episode, sections, boilerplate_words):
     words = sum(len(s["text"].split()) for s in sections)
     conn.execute(
@@ -174,8 +184,7 @@ def insert_episode(conn, episode, sections, boilerplate_words):
     )
     seg_idx = 0
     for n, section in enumerate(sections, 1):
-        heading_norm = normalize(f"{episode['title'] or ''} | {section['title']}")
-        text_norm = normalize(section["text"])
+        heading_norm, text_norm = section_norms(episode["title"], section)
         section_id = conn.execute(
             "INSERT INTO sections (episode_id, idx, title, start_time, end_time, text, heading_norm, text_norm)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -190,9 +199,6 @@ def insert_episode(conn, episode, sections, boilerplate_words):
         )
         rows = []
         for seg in section["segments"]:
-            rows.append((
-                episode["id"], seg_idx, section_id, seg["start"], seg["end"],
-                re.sub(r"\s*>>\s*", " ", seg["text"]).strip(), int(seg["text"].startswith(">>")),
-            ))
+            rows.append((episode["id"], seg_idx, section_id, seg["start"], seg["end"], *utterance(seg)))
             seg_idx += 1
         conn.executemany("INSERT INTO segments VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
