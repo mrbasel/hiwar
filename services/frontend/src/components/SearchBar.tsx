@@ -31,7 +31,7 @@ export function SearchBar({
 
   return (
     <header className="border-b border-rule px-4 pt-5 sm:px-8">
-      <div className="flex items-center gap-3 pb-4 sm:gap-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-4 sm:flex-nowrap sm:gap-4">
         <Link
           to="/"
           aria-label="راوي: الصفحة الرئيسية"
@@ -39,7 +39,7 @@ export function SearchBar({
         >
           راوي
         </Link>
-        <search className="max-w-2xl flex-1">
+        <search className="min-w-0 max-w-2xl flex-1">
           <form
             className="relative"
             onSubmit={(e) => {
@@ -66,22 +66,24 @@ export function SearchBar({
             </button>
           </form>
         </search>
-        <IconButton
-          label={showFilters ? "أخفِ الفلاتر" : "أظهر الفلاتر"}
-          aria-pressed={showFilters}
-          aria-expanded={showFilters}
-          aria-controls={filtersId}
-          onClick={() => setShowFilters((open) => !open)}
-          className={cn("relative size-10", showFilters && "bg-accent-wash text-ink")}
-        >
-          <SlidersHorizontal />
-          {filtered && !showFilters && (
-            <span aria-hidden className="absolute top-1.5 end-1.5 size-2 rounded-full bg-accent" />
-          )}
-        </IconButton>
-        <div className="ms-auto flex">
-          <DevModeToggle />
-          <ThemeToggle />
+        <div className="flex w-full justify-end sm:contents">
+          <IconButton
+            label={showFilters ? "أخفِ الفلاتر" : "أظهر الفلاتر"}
+            aria-pressed={showFilters}
+            aria-expanded={showFilters}
+            aria-controls={filtersId}
+            onClick={() => setShowFilters((open) => !open)}
+            className={cn("relative size-10", showFilters && "bg-accent-wash text-ink")}
+          >
+            <SlidersHorizontal />
+            {filtered && !showFilters && (
+              <span aria-hidden className="absolute top-1.5 end-1.5 size-2 rounded-full bg-accent" />
+            )}
+          </IconButton>
+          <div className="flex sm:ms-auto">
+            <DevModeToggle />
+            <ThemeToggle />
+          </div>
         </div>
       </div>
       <div id={filtersId} hidden={!showFilters} className="-mx-4 border-t border-rule px-4 sm:-mx-8 sm:px-8">
