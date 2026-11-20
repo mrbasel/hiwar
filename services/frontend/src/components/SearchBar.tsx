@@ -35,7 +35,7 @@ export function SearchBar({
         <Link
           to="/"
           aria-label="راوي: الصفحة الرئيسية"
-          className="shrink-0 text-3xl font-bold text-ink no-underline sm:w-24"
+          className="shrink-0 text-3xl font-bold text-ink no-underline max-sm:hidden sm:w-24"
         >
           راوي
         </Link>

@@ -15,6 +15,8 @@ const MATCH_LABEL = { keyword: "تطابق لفظي", semantic: "تطابق في
 
 const toggleClass = cn(buttonClass("quiet", "sm"), "-ms-3 text-muted hover:text-ink");
 
+const quoteClass = "font-read text-[1.1rem] leading-[1.6] sm:text-[1.3rem]";
+
 const momentHtml = (m: Moment) =>
   `<span class="ctx">${m.before}</span> ${m.html} <span class="ctx">${m.after}</span>`;
 
@@ -30,8 +32,13 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
     <article className="py-5">
       <div className="flex items-start gap-4 sm:gap-6">
         <div className="min-w-0 flex-1">
-          <EpisodeMeta show={episode.show} date={episode.date} duration={episode.duration} />
-          <h2 className="text-lg leading-snug font-semibold">
+          <EpisodeMeta
+            show={episode.show}
+            date={episode.date}
+            duration={episode.duration}
+            hideDurationOnMobile
+          />
+          <h2 className="line-clamp-2 text-lg leading-snug font-semibold sm:line-clamp-none">
             <Link
               to="/episode/$id"
               params={{ id: episode.id }}
@@ -41,7 +48,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
           </h2>
 
           {!sectionsOpen && episode.has_transcript && (moment || snippet) && (
-            <p className="mt-1.5 line-clamp-2 font-read text-[1.3rem] leading-[1.6]">
+            <p className={cn("mt-1.5 line-clamp-2", quoteClass)}>
               {moment ? (
                 <>
                   <InlineTime seconds={moment.start} href={moment.link} />
@@ -139,16 +146,13 @@ function Section({ episodeId, hit }: { episodeId: string; hit: SearchHit }) {
         />
       </h3>
       {hit.moments.map((m) => (
-        <p key={m.start} className="mt-1 font-read text-[1.3rem] leading-[1.6]">
+        <p key={m.start} className={cn("mt-1", quoteClass)}>
           <InlineTime seconds={m.start} href={m.link} className="text-faint" />
           <span className="[&_.ctx]:text-muted" dangerouslySetInnerHTML={{ __html: momentHtml(m) }} />
         </p>
       ))}
       {!hit.moments.length && hit.snippet && (
-        <p
-          className="mt-1 font-read text-[1.3rem] leading-[1.6] text-muted"
-          dangerouslySetInnerHTML={{ __html: hit.snippet }}
-        />
+        <p className={cn("mt-1 text-muted", quoteClass)} dangerouslySetInnerHTML={{ __html: hit.snippet }} />
       )}
     </section>
   );
