@@ -2,8 +2,8 @@
 
     uv run python -m pipeline.export [--db PATH] [--out PATH] [--model MODEL]
 
-Seeds the server's database, and makes the snapshot a bulk rebuild ships
-(changed sectioning, a new model). From the server's side it's the same as
+Seeded the server's database; once it has episodes podcasts.db doesn't, an
+export no longer replaces it. From the server's side it's the same as
 having added every episode one by one: episodes, sections, the full-text
 index and the model's quantized vectors, plus the download state, so the
 downloader picks up where podcasts.db left off. Section ids are podcasts.db's.

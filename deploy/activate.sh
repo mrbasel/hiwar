@@ -6,7 +6,8 @@
 # restarts the API and waits for /api/health to report semantic search. If it
 # doesn't come up, points the link back at what it was and restarts again.
 # Then removes all but the newest few. Installed as /usr/local/bin/rawi-activate
-# by ansible/app.yml; run by the GitHub deploy workflow and scripts/deploy-data.sh.
+# by ansible/app.yml; run by the GitHub deploy workflow, and by hand to swap the
+# database (pipeline/export.py makes one; upload it to /srv/rawi/data/<stamp>).
 #
 # A release first gets the pipeline's Python environment (pipeline.ingest and
 # pipeline.worker run from the live release). A data switch waits for the
