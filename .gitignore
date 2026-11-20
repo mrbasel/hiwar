@@ -29,3 +29,8 @@ services/frontend/.tanstack/
 # Embeddings (built by pipeline.embed) and the local query model
 embeddings/
 models/
+
+# Downloader (downloader/compose.yml): its key, downloads and state
+downloader/keys/
+downloader/data/
+downloader/fetch.log

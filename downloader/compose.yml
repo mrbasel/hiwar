@@ -1,0 +1,29 @@
+# The downloader, on the homeserver: downloads new episodes with yt-dlp and
+# sends them to the server (see pipeline/fetch.py). Run by cron, e.g. every
+# six hours, which keeps YouTube's request count low:
+#
+#   0 */6 * * * cd /path/to/rawi/downloader && docker compose run --rm fetch >> fetch.log 2>&1
+#
+# Next to this file:
+#   .env       RAWI_HOST=<the server's address>, and UID/GID to own data/
+#   keys/      id_ed25519 (the key the server lets run rawi-ingest only) and
+#              known_hosts (the server's host key: ssh-keyscan <address>)
+#   data/      downloads (the raw archive), state.db and logs
+# Make both directories before the first run (mkdir data keys), or Docker
+# makes them as root.
+#
+# After a git pull: docker compose build
+services:
+  fetch:
+    build:
+      context: ..
+      dockerfile: downloader/Dockerfile
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
+      RAWI_SSH: >-
+        ssh -i /keys/id_ed25519 -o UserKnownHostsFile=/keys/known_hosts
+        -o BatchMode=yes rawi-writer@${RAWI_HOST:?set RAWI_HOST in .env}
+    volumes:
+      - ./data:/data
+      - ./keys:/keys:ro
