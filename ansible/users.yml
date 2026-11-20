@@ -49,7 +49,7 @@
           PasswordAuthentication no
           KbdInteractiveAuthentication no
           PermitRootLogin no
-          AllowUsers {{ (admin_users | map(attribute='name') | list + [deploy_user]) | join(' ') }}
+          AllowUsers {{ (admin_users | map(attribute='name') | list + [deploy_user, 'rawi-writer']) | join(' ') }}
         mode: "0644"
         validate: /usr/sbin/sshd -t -f %s
       notify: Restart SSH

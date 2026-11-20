@@ -26,15 +26,31 @@
       loop: "{{ admin_users }}"
 
     # Writes the database: pipeline.ingest (for the downloader, over ssh) and
-    # pipeline.worker. The deploy group shares it with the API.
+    # pipeline.worker. The deploy group shares it with the API. A shell, as
+    # sshd runs the downloader's forced command with it.
     - name: Create the user the pipeline runs as
       ansible.builtin.user:
         name: rawi-writer
         system: true
-        shell: /usr/sbin/nologin
-        create_home: false
+        shell: /bin/sh
+        home: /var/lib/rawi-writer
         groups: "{{ deploy_user }}"
         append: true
+
+    - name: Create its home, for authorized_keys
+      ansible.builtin.file:
+        path: /var/lib/rawi-writer
+        state: directory
+        owner: rawi-writer
+        group: rawi-writer
+        mode: "0750"
+
+    - name: Let the downloader run rawi-ingest, and nothing else
+      ansible.posix.authorized_key:
+        user: rawi-writer
+        key: "{{ downloader_public_key }}"
+        key_options: 'restrict,command="/usr/local/bin/rawi-ingest"'
+        exclusive: true
 
     - name: Install the deploy key
       ansible.posix.authorized_key:

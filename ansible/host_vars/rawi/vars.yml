@@ -13,6 +13,9 @@ admin_users:
 # DEPLOY_SSH_KEY secret.
 deploy_user: deploy
 deploy_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBniR0cuMskzkcEpMQ7By9c9+vjdDnwa+r3rULNJQNh9 rawi-deploy (GitHub Actions)"
+# The downloader on the homeserver (downloader/), allowed to run rawi-ingest
+# as rawi-writer and nothing else.
+downloader_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDILC88IwG+ex4GaT3gDC3bI2mkKGNOjAAv/fTuy3otj rawi-downloader"
 
 swap_size: 2G
 node_major: 24
