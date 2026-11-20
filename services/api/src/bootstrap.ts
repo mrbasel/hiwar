@@ -24,7 +24,7 @@ async function loadSemantic(): Promise<Semantic | undefined> {
     return undefined;
   }
   console.log(
-    `loaded ${index.sections.length} vectors (${index.model}) in ${Math.round(performance.now() - started)} ms`,
+    `loaded ${index.live.length} vectors (${index.model}) in ${Math.round(performance.now() - started)} ms`,
   );
 
   if (config.queryEmbedder === "openrouter") {

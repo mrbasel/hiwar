@@ -105,7 +105,9 @@ async function hybridSearch(params: SearchParams, semantic: Semantic) {
 
   const fused = rrf([bm25Ids, semanticIds]);
   const byId = new Map(queries.hitsByIds(fused.ids).map((h) => [h.id, h]));
-  const groups = groupByEpisode(fused.ids.map((id) => ({ ...byId.get(id)!, score: fused.scores.get(id)! })));
+  // A section deleted since the index last caught up has no hit.
+  const found = fused.ids.filter((id) => byId.has(id));
+  const groups = groupByEpisode(found.map((id) => ({ ...byId.get(id)!, score: fused.scores.get(id)! })));
   const hits = groups.slice((page - 1) * limit, page * limit).flat();
 
   return {

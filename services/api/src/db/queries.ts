@@ -137,8 +137,11 @@ export function segmentsBySection(ids: number[]): Map<number, Segment[]> {
   return new Map(rows.map((r) => [r.id, decodeSegments(r.segments)]));
 }
 
-export function exportedAt(): string | null {
-  const row = db.prepare("SELECT value FROM build_info WHERE key = 'exported_at'").get();
+// When episodes last changed; older exports only say when they were made.
+export function publishedAt(): string | null {
+  const row = db
+    .prepare("SELECT value FROM build_info WHERE key IN ('published_at', 'exported_at') ORDER BY key DESC LIMIT 1")
+    .get();
   return row ? JSON.parse(row.value as string) : null;
 }
 

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { semantic } from "../bootstrap.js";
 import { config } from "../config.js";
-import { episodeById, exportedAt, listShows } from "../db/queries.js";
+import { episodeById, listShows, publishedAt } from "../db/queries.js";
 import { presentEpisode } from "../episodes/present.js";
 import { recommendations } from "../episodes/recommend.js";
 import { QueryError, search, type SearchParams } from "../search/service.js";
@@ -43,9 +43,14 @@ api.get("/search", limit(30), async (req, res) => {
   }
 });
 
-// For deploys: which export is served, and whether semantic search loaded.
+// For deploys and checks: how current the data is, and whether semantic search loaded.
 api.get("/health", (_req, res) => {
-  res.json({ status: "ok", exported_at: exportedAt(), semantic: semantic !== undefined });
+  res.json({
+    status: "ok",
+    published_at: publishedAt(),
+    vectors: semantic?.index.live.length ?? 0,
+    semantic: semantic !== undefined,
+  });
 });
 
 api.get("/shows", (_req, res) => {

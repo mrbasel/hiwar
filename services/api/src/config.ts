@@ -7,8 +7,8 @@ if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 
 export const config = {
   dev: process.env.NODE_ENV === "development",
-  // podcasts.db as `pipeline.export` cuts it down for the site.
-  dbPath: process.env.DB_PATH ?? path.join(ROOT, "serve.db"),
+  // The server's database (pipeline/serve_db.py); `pipeline.export` makes one from podcasts.db.
+  dbPath: process.env.DB_PATH ?? path.join(ROOT, "rawi.db"),
   embeddingModel: process.env.EMBEDDING_MODEL ?? "baai/bge-m3",
   // For map.json.
   embeddingsDir: process.env.EMBEDDINGS_DIR ?? path.join(ROOT, "embeddings/bge-m3"),

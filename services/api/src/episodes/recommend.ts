@@ -8,6 +8,11 @@ const CACHED = 1000;
 
 const cache = new Map<string, string[]>();
 
+// For when episodes are added or deleted.
+export function clearRecommendations() {
+  cache.clear();
+}
+
 export function recommendations(id: string) {
   if (!semantic) return [];
   let ids = cache.get(id);
