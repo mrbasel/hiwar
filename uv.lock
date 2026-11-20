@@ -279,19 +279,28 @@ wheels = [
 name = "rawi"
 version = "0.1.0"
 source = { virtual = "." }
+default-groups = ["download", "map"]
 dependencies = [
     { name = "numpy" },
+]
+
+[package.dev-dependencies]
+download = [
+    { name = "yt-dlp", extra = ["default"] },
+]
+map = [
     { name = "scikit-learn" },
     { name = "umap-learn" },
-    { name = "yt-dlp", extra = ["default"] },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=2.5.4" },
+requires-dist = [{ name = "numpy", specifier = ">=2.5.4" }]
+
+[package.metadata.requires-dev]
+download = [{ name = "yt-dlp", extras = ["default"], specifier = ">=2026.10.26" }]
+map = [
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "umap-learn", specifier = ">=0.5.12" },
-    { name = "yt-dlp", extras = ["default"], specifier = ">=2026.10.26" },
 ]
 
 [[package]]

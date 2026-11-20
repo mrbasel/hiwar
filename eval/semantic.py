@@ -17,7 +17,7 @@ from functools import cache
 import numpy as np
 
 from pipeline.embed import out_dir
-from pipeline.export import quantize
+from pipeline.serve_db import quantize
 from pipeline.openrouter import api_key, embed
 
 # As in services/api/src/search/semantic.ts.
