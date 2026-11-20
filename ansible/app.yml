@@ -1,5 +1,5 @@
 ---
-- name: Run the app as a service, deployed by CI and scripts/deploy-data.sh
+- name: Run the app as a service, and the pipeline that takes in new episodes
   hosts: rawi
   become: true
 
@@ -25,6 +25,17 @@
         append: true
       loop: "{{ admin_users }}"
 
+    # Writes the database: pipeline.ingest (for the downloader, over ssh) and
+    # pipeline.worker. The deploy group shares it with the API.
+    - name: Create the user the pipeline runs as
+      ansible.builtin.user:
+        name: rawi-writer
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+        groups: "{{ deploy_user }}"
+        append: true
+
     - name: Install the deploy key
       ansible.posix.authorized_key:
         user: "{{ deploy_user }}"
@@ -43,12 +54,30 @@
         - /srv/rawi
         - /srv/rawi/releases
         - /srv/rawi/data
+        - /srv/rawi/.uv-cache
 
-    - name: Install the activate script
+    # Shared by the worker and rawi-activate; rawi-ingest writes the trigger
+    - name: Create the worker's lock and trigger files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        owner: rawi-writer
+        group: "{{ deploy_user }}"
+        mode: "0664"
+        modification_time: preserve
+        access_time: preserve
+      loop:
+        - /srv/rawi/data/worker.lock
+        - /srv/rawi/data/worker.trigger
+
+    - name: Install the activate and ingest scripts
       ansible.builtin.copy:
-        src: ../deploy/activate.sh
-        dest: /usr/local/bin/rawi-activate
+        src: ../deploy/{{ item.src }}
+        dest: /usr/local/bin/{{ item.dest }}
         mode: "0755"
+      loop:
+        - { src: activate.sh, dest: rawi-activate }
+        - { src: ingest.sh, dest: rawi-ingest }
 
     - name: Let the deploy group restart the app and read its logs
       community.general.sudoers:
@@ -72,7 +101,17 @@
         owner: root
         group: rawi
         mode: "0640"
+      diff: false # it holds secrets
       notify: Restart the app
+
+    - name: Write the pipeline's environment
+      ansible.builtin.template:
+        src: templates/pipeline.env.j2
+        dest: /etc/rawi/pipeline.env
+        owner: root
+        group: rawi-writer
+        mode: "0640"
+      diff: false # it holds secrets
 
     - name: Install the systemd unit
       ansible.builtin.template:
@@ -81,12 +120,35 @@
         mode: "0644"
       notify: Restart the app
 
+    - name: Install the worker's systemd units
+      ansible.builtin.template:
+        src: templates/{{ item }}.j2
+        dest: /etc/systemd/system/{{ item }}
+        mode: "0644"
+      loop:
+        - rawi-worker.service
+        - rawi-worker.path
+        - rawi-worker.timer
+      register: worker_units
+
     # Started by the first deploy that finds a release and data in place
     - name: Enable the app at boot
       ansible.builtin.systemd_service:
         name: rawi
         enabled: true
         daemon_reload: true
+
+    - name: Start the worker's path unit and timer
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+        daemon_reload: "{{ worker_units.changed }}"
+      # A dry run hasn't installed them
+      ignore_errors: "{{ ansible_check_mode }}"
+      loop:
+        - rawi-worker.path
+        - rawi-worker.timer
 
   handlers:
     # Not before the first deploy, when there's nothing to run yet

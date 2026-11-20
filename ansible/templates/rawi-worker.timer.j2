@@ -1,0 +1,9 @@
+[Unit]
+Description=rawi: retry uploads earlier worker runs left
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=15min
+
+[Install]
+WantedBy=timers.target

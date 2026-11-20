@@ -61,3 +61,37 @@
           - nodejs
           - rsync
         state: present
+
+    # The pipeline that takes in new episodes (pipeline.ingest, pipeline.worker)
+    # runs on Python {{ python_version }} from uv; rawi-activate gives each
+    # release its environment
+    - name: Create the directory for uv {{ uv_version }}
+      ansible.builtin.file:
+        path: /opt/uv/{{ uv_version }}
+        state: directory
+        mode: "0755"
+
+    - name: Install uv {{ uv_version }}
+      ansible.builtin.unarchive:
+        src: https://github.com/astral-sh/uv/releases/download/{{ uv_version }}/uv-x86_64-unknown-linux-gnu.tar.gz
+        dest: /opt/uv/{{ uv_version }}
+        remote_src: true
+        extra_opts: [--strip-components=1]
+        creates: /opt/uv/{{ uv_version }}/uv
+      # A dry run hasn't made the directory
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Put uv on the PATH
+      ansible.builtin.file:
+        src: /opt/uv/{{ uv_version }}/uv
+        dest: /usr/local/bin/uv
+        state: link
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    # Where releases' environments find it (see deploy/activate.sh)
+    - name: Install Python {{ python_version }}
+      ansible.builtin.command: uv python install {{ python_version }}
+      environment:
+        UV_PYTHON_INSTALL_DIR: /opt/uv/python
+      register: python_install
+      changed_when: "'Installed' in python_install.stderr"

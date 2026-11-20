@@ -1,0 +1,9 @@
+[Unit]
+Description=rawi: publish uploads as rawi-ingest takes them in
+
+[Path]
+PathChanged=/srv/rawi/data/worker.trigger
+Unit=rawi-worker.service
+
+[Install]
+WantedBy=paths.target

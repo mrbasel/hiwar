@@ -8,6 +8,10 @@
 # Then removes all but the newest few. Installed as /usr/local/bin/rawi-activate
 # by ansible/app.yml; run by the GitHub deploy workflow and scripts/deploy-data.sh.
 #
+# A release first gets the pipeline's Python environment (pipeline.ingest and
+# pipeline.worker run from the live release). A data switch waits for the
+# worker to finish, so it never writes to the database being replaced.
+#
 # Usage:
 #   rawi-activate release /srv/rawi/releases/<sha>
 #   rawi-activate data /srv/rawi/data/<timestamp>
@@ -18,6 +22,9 @@ ROOT=/srv/rawi
 HEALTH=http://127.0.0.1:3000/api/health
 KEEP_RELEASES=5
 KEEP_DATA=2 # each export is ~1.4 GB
+WORKER_LOCK=$ROOT/data/worker.lock # see pipeline/worker.py
+# uv and Python 3.12 are installed by ansible/base.yml.
+export UV_PYTHON_INSTALL_DIR=/opt/uv/python UV_PYTHON_DOWNLOADS=never UV_CACHE_DIR=$ROOT/.uv-cache
 
 kind=${1:?usage: rawi-activate release|data DIR}
 target=$(realpath "${2:?usage: rawi-activate release|data DIR}")
@@ -42,6 +49,15 @@ healthy() {
   done
   return 1
 }
+
+if [[ $kind == release && -f $target/pyproject.toml ]]; then
+  echo "installing the pipeline's dependencies"
+  UV_PROJECT_ENVIRONMENT=$target/.venv uv sync --frozen --no-default-groups --project "$target" --quiet
+fi
+if [[ $kind == data ]]; then
+  exec 8>>"$WORKER_LOCK"
+  flock 8
+fi
 
 previous=$(readlink "$link" || true)
 touch "$target" # newest, so pruning keeps it even if it's an older commit

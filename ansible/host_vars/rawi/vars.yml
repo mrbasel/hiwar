@@ -16,4 +16,6 @@ deploy_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBniR0cuMskzkcEpMQ7By9c9
 
 swap_size: 2G
 node_major: 24
+uv_version: "0.13.6"
+python_version: "3.12"
 app_port: 3000

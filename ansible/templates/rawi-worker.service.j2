@@ -1,0 +1,39 @@
+[Unit]
+Description=rawi: build, embed and publish uploaded episodes
+After=network-online.target
+Wants=network-online.target
+
+# Started by rawi-worker.path when rawi-ingest takes in uploads, and by
+# rawi-worker.timer for what earlier runs left. See pipeline/worker.py.
+[Service]
+Type=oneshot
+User=rawi-writer
+Group=rawi-writer
+# The API's user shares the database through the deploy group.
+UMask=0002
+WorkingDirectory=/srv/rawi/current
+EnvironmentFile=/etc/rawi/pipeline.env
+ExecStart=/srv/rawi/current/.venv/bin/python -m pipeline.worker
+TimeoutStartSec=2h
+
+# Search comes first on the one CPU, and the API keeps its memory.
+Nice=10
+CPUWeight=20
+MemoryHigh=200M
+MemoryMax=300M
+
+# Writes only the database, and talks to OpenRouter.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/rawi/data
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

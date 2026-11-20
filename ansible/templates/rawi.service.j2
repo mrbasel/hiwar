@@ -6,6 +6,10 @@ Wants=network-online.target
 [Service]
 User=rawi
 Group=rawi
+# The database is rawi-writer's (see rawi-worker.service). Reading it in WAL
+# mode needs write access to its shared-memory file, through the deploy group.
+SupplementaryGroups=deploy
+UMask=0002
 # The release and data deploys link in (see deploy/activate.sh).
 WorkingDirectory=/srv/rawi/current/api
 EnvironmentFile=/etc/rawi/rawi.env
@@ -21,6 +25,7 @@ MemoryMax=700M
 # The API only reads its files and talks to Workers AI.
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/srv/rawi/data
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
