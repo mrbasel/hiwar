@@ -288,8 +288,9 @@ def fetch_metadata(conn, data_dir, log_dir, limit=METADATA_PER_RUN):
     return result.blocked
 
 
-def download_all(conn, sources, data_dir, log_dir, only=None):
-    """Download every source in turn. Returns (rate-limited, errors)."""
+def download_all(conn, sources, data_dir, log_dir, only=None, after_source=None):
+    """Download every source in turn, calling after_source() after each one.
+    Returns (rate-limited, errors)."""
     errors = []
     fd, archive = tempfile.mkstemp(prefix="podcasts-archive-", suffix=".txt")
     os.close(fd)
@@ -340,6 +341,8 @@ def download_all(conn, sources, data_dir, log_dir, only=None):
                 detail = ", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
                 log(f"{name}: {new} new" + (f" ({detail})" if new else "")
                     + "".join(f"; {note}" for note in notes))
+            if after_source:
+                after_source()
             if blocked:
                 log(f"rate-limited on {name}; stopping downloads, the next run continues from here")
                 return True, errors
