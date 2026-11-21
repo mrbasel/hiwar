@@ -12,7 +12,9 @@ DIR belong to which video. Then it downloads as scripts/update.sh does
 what it doesn't have yet with `rawi-ingest add`: downloaded videos, to
 publish (those without captions too, for their titles and chapters); videos
 whose captions failed or that have none, as outcomes; and each source's new
-state. What a broken run or connection didn't send goes on the next run.
+state. It sends after each source, so a long backfill is published as it
+goes, and once more at the end; what a broken run or connection didn't send
+goes on the next run.
 
 RAWI_SSH is the command that reaches rawi-ingest, e.g. `ssh -i KEY
 rawi-writer@HOST`; on the server, that key can run nothing else.
@@ -123,17 +125,24 @@ def unsent(conn, server, plan_sources, data_dir):
 
 
 def send(conn, server, plan_sources, data_dir):
-    """Send what the server doesn't have. Returns whether all of it was taken."""
+    """Send what the server doesn't have, and note what it now has in `server`
+    and `plan_sources`, so it isn't sent again. Returns whether all of it was taken."""
     uploads, outcomes, sources = unsent(conn, server, plan_sources, data_dir)
     if not (uploads or outcomes or sources):
         return True
     log(f"sending {len(uploads)} videos, {len(outcomes)} outcomes and {len(sources)} source updates")
     ok = True
     for i in range(0, len(uploads), UPLOADS_PER_CALL):
-        batch = [upload(data_dir, *u) for u in uploads[i:i + UPLOADS_PER_CALL]]
-        ok &= ingest(["add"], batch)[1]
+        sent = uploads[i:i + UPLOADS_PER_CALL]
+        ok &= ingest(["add"], [upload(data_dir, *u) for u in sent])[1]
+        # Rejected ones too: sending them again wouldn't change the answer.
+        server.update((vid, ("queued", 0, None)) for vid, _, _ in sent)
     if outcomes or sources:
         ok &= ingest(["add"], outcomes + sources)[1]
+        server.update((o["id"], (o["status"], o["attempts"], o["reason"])) for o in outcomes)
+        by_url = {s["url"]: s for s in plan_sources}
+        for s in sources:
+            by_url[s["url"]].update({k: s[k] for k in SOURCE_STATE})
     return ok
 
 
@@ -172,17 +181,20 @@ def main():
     with Pool(2) as pool:
         errors += scan_data(conn, data_dir, pool)
     blocked = retry_failed(conn, data_dir, log_dir)
+    def send_now():
+        try:
+            if not send(conn, server, sources, data_dir):
+                errors.append("the server rejected some records (see above)")
+        except Exception as e:
+            errors.append(f"couldn't send to the server; the next run will: {e}")
+
     if not blocked:
-        blocked, errs = download_all(conn, sources, data_dir, log_dir, args.source and args.source.rstrip("/"))
+        blocked, errs = download_all(conn, sources, data_dir, log_dir, args.source and args.source.rstrip("/"),
+                                     after_source=send_now)
         errors += errs
     if not blocked:
         blocked = fetch_metadata(conn, data_dir, log_dir, args.metadata_limit)
-
-    try:
-        if not send(conn, server, sources, data_dir):
-            errors.append("the server rejected some records (see above)")
-    except Exception as e:
-        errors.append(f"couldn't send to the server; the next run will: {e}")
+    send_now()
     conn.close()
 
     log(f"done in {time.time() - t0:.0f}s" + (", stopped on a rate limit" if blocked else ""))
