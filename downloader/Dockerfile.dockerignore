@@ -1,5 +1,0 @@
-# Only what the image needs; the repo also holds the data and node_modules.
-*
-!pipeline/*.py
-!pyproject.toml
-!uv.lock
