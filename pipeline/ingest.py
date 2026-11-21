@@ -6,7 +6,7 @@
 
 The downloader runs elsewhere (YouTube blocks the server's IP) and reaches
 this over ssh, with a key that may run nothing else; the subcommand then
-comes from SSH_ORIGINAL_COMMAND. It asks for the `plan` before a run: sources
+comes from SSH_ORIGINAL_COMMAND, and can't be `delete`. It asks for the `plan` before a run: sources
 from sources.toml with their state (new ones start as 'backfilling'), and
 every video id the server knows with its status and attempts, which is the
 download archive. Then it sends what it found, one record per line:
@@ -166,9 +166,11 @@ def start_worker():
 
 
 def main():
+    remote = not sys.argv[1:]
     args = sys.argv[1:] or shlex.split(os.environ.get("SSH_ORIGINAL_COMMAND", ""))
     command, rest = (args[0], args[1:]) if args else (None, [])
-    if command not in ("plan", "add", "delete") or (command == "delete") != bool(rest):
+    allowed = ("plan", "add") if remote else ("plan", "add", "delete")
+    if command not in allowed or (command == "delete") != bool(rest):
         sys.exit(__doc__.split("\n\n")[1])
 
     conn = connect(os.environ.get("DB_PATH", "rawi.db"))
