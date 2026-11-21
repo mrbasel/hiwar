@@ -2,17 +2,17 @@
 
     python -m pipeline.fetch [--data DIR] [--source URL] [--metadata-limit N]
 
-Runs on another machine, in a container (see downloader/), as YouTube blocks
-the server's IP. The server's database is the source of truth. A run starts
-with its plan (`rawi-ingest plan`: sources and every video it knows) and
-brings a local state database (DIR/state.db, podcasts.db's schema) in line
-with it; what's only local is which files in DIR belong to which video. Then
-it downloads as scripts/update.sh does (steps 1-4 in pipeline/update.py),
-without building, and sends the server what it doesn't have yet with
-`rawi-ingest add`: downloaded videos, to publish (those without captions too,
-for their titles and chapters); videos whose captions failed or that have
-none, as outcomes; and each source's new state. What a broken run or
-connection didn't send goes on the next run.
+Runs on another machine (an LXC in mrbasel/homelab, ansible/rawi.yml), as
+YouTube blocks the server's IP. The server's database is the source of
+truth. A run starts with its plan (`rawi-ingest plan`: sources and every
+video it knows) and brings a local state database (DIR/state.db,
+podcasts.db's schema) in line with it; what's only local is which files in
+DIR belong to which video. Then it downloads as scripts/update.sh does
+(steps 1-4 in pipeline/update.py), without building, and sends the server
+what it doesn't have yet with `rawi-ingest add`: downloaded videos, to
+publish (those without captions too, for their titles and chapters); videos
+whose captions failed or that have none, as outcomes; and each source's new
+state. What a broken run or connection didn't send goes on the next run.
 
 RAWI_SSH is the command that reaches rawi-ingest, e.g. `ssh -i KEY
 rawi-writer@HOST`; on the server, that key can run nothing else.
