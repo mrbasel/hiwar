@@ -275,7 +275,7 @@ export class MapEngine {
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
     const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
-    const order = [...this.model.clusters.values()].sort((a, b) => b.size - a.size);
+    const order = [...this.model.clusters.values()].toSorted((a, b) => b.size - a.size);
     for (const c of order) {
       if (this.activeCluster !== null && c.id !== this.activeCluster) continue;
       const [x, y] = this.toScreen(c);

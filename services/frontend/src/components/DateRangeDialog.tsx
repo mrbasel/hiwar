@@ -18,16 +18,18 @@ export function DateRangeDialog({
 }) {
   const [from, setFrom] = useState(initial.from ?? "");
   const [to, setTo] = useState(initial.to ?? "");
+  const [today, setToday] = useState(() => isoDay(new Date()));
   const [opened, setOpened] = useState(open);
   if (open !== opened) {
     setOpened(open);
     if (open) {
       setFrom(initial.from ?? "");
       setTo(initial.to ?? "");
+      // oxlint-disable-next-line react/purity -- only read as it opens
+      setToday(isoDay(new Date()));
     }
   }
 
-  const today = isoDay(new Date());
   const reversed = Boolean(from && to && from > to);
   const valid = Boolean(from || to) && !reversed;
 
@@ -44,7 +46,7 @@ export function DateRangeDialog({
         >
           <div className="grid grid-cols-2 gap-3">
             <DayField label="من" value={from} onChange={setFrom} max={to || today} />
-            <DayField label="إلى" value={to} onChange={setTo} min={from || FIRST_DAY} />
+            <DayField label="إلى" value={to} onChange={setTo} min={from || FIRST_DAY} max={today} />
           </div>
           <p aria-live="polite" className="mt-2 min-h-5 text-sm text-error">
             {reversed && "تاريخ البداية بعد تاريخ النهاية."}
@@ -66,16 +68,15 @@ function DayField({
   value,
   onChange,
   min = FIRST_DAY,
-  max = isoDay(new Date()),
+  max,
 }: {
   label: string;
   value: string;
   onChange: (day: string) => void;
   min?: string;
-  max?: string;
+  max: string;
 }) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: TextField renders the input
     <label className="flex flex-col gap-1.5 text-sm text-muted">
       {label}
       <TextField type="date" dir="ltr" value={value} onValueChange={onChange} min={min} max={max} />

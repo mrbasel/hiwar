@@ -5,8 +5,9 @@ const POLL_MS = 5000;
 
 // Calls onChange whenever another connection (the server's pipeline) has
 // committed since the last check, and again on the next one if it threw.
+const version = () => Number(db.prepare("PRAGMA data_version").get()!.data_version);
+
 export function watch(onChange: () => void) {
-  const version = () => Number(db.prepare("PRAGMA data_version").get()!.data_version);
   let last = version();
   setInterval(() => {
     const now = version();

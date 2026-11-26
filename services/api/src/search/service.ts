@@ -91,11 +91,11 @@ function bm25Search(params: SearchParams) {
 
 // Both rankings are filtered before taking their top RRF_DEPTH, so small
 // channels and short ranges aren't crowded out.
-async function hybridSearch(params: SearchParams, semantic: Semantic) {
+async function hybridSearch(params: SearchParams, loaded: Semantic) {
   const started = performance.now();
   const { parsed, limit, page, scope } = parse(params);
   const bm25Ids = fts(() => queries.bm25SectionIds(parsed.match, scope, RRF_DEPTH));
-  const semanticIds = await semanticSearch(semantic.index, params.q, RRF_DEPTH, semantic.embed, {
+  const semanticIds = await semanticSearch(loaded, params.q, RRF_DEPTH, {
     channels: scope.shows.length ? new Set(scope.shows) : undefined,
     startDate: scope.startDate,
     endDate: scope.endDate,

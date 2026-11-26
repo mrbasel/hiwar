@@ -33,7 +33,7 @@ function findMoments(segments: Segment[], terms: string[], url: string) {
       return { i, score: terms.filter((t) => ws.has(t)).length };
     })
     .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score || a.i - b.i);
+    .toSorted((a, b) => b.score - a.score || a.i - b.i);
 
   const picked: number[] = [];
   for (const { i } of scored) {
@@ -41,7 +41,7 @@ function findMoments(segments: Segment[], terms: string[], url: string) {
     if (picked.every((p) => Math.abs(p - i) > 2)) picked.push(i);
   }
   return picked
-    .sort((a, b) => a - b)
+    .toSorted((a, b) => a - b)
     .map((i) => {
       const seg = segments[i];
       return {

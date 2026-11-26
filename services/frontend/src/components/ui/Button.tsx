@@ -30,6 +30,7 @@ export function Button({
   type = "button",
   ...props
 }: ComponentProps<"button"> & { variant?: keyof typeof variants; size?: keyof typeof sizes }) {
+  // oxlint-disable-next-line react/button-has-type -- type defaults to "button"
   return <button type={type} className={cn(buttonClass(variant, size), className)} {...props} />;
 }
 
@@ -42,6 +43,7 @@ export function IconButton({
 }: ComponentProps<"button"> & { label: string }) {
   return (
     <button
+      // oxlint-disable-next-line react/button-has-type -- type defaults to "button"
       type={type}
       aria-label={label}
       title={label}

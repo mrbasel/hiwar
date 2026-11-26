@@ -10,7 +10,7 @@ export function rrf(rankings: number[][]): { ids: number[]; scores: Map<number, 
   for (const ranking of rankings) {
     ranking.forEach((id, i) => scores.set(id, (scores.get(id) ?? 0) + 1 / (RRF_K + i + 1)));
   }
-  const ids = [...scores.keys()].sort((a, b) => scores.get(b)! - scores.get(a)!);
+  const ids = [...scores.keys()].toSorted((a, b) => scores.get(b)! - scores.get(a)!);
   return { ids, scores };
 }
 
