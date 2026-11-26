@@ -154,7 +154,6 @@ function MapPage() {
 
 function ColourOption({ value, children }: { value: ColourBy; children: ReactNode }) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: Radio.Root renders the control
     <label className="flex cursor-pointer items-center gap-1.5">
       <Radio.Root
         value={value}
@@ -191,7 +190,7 @@ function Selected({
       model.points
         .filter((q) => q !== point)
         .map((q) => [q, (q.x - point.x) ** 2 + (q.y - point.y) ** 2] as const)
-        .sort((a, b) => a[1] - b[1])
+        .toSorted((a, b) => a[1] - b[1])
         .slice(0, 10)
         .map(([q]) => q),
     [model, point],
@@ -234,7 +233,7 @@ function ClusterList({
   active: number | null;
   onToggle: (id: number) => void;
 }) {
-  const order = useMemo(() => [...model.clusters.values()].sort((a, b) => b.size - a.size), [model]);
+  const order = useMemo(() => [...model.clusters.values()].toSorted((a, b) => b.size - a.size), [model]);
   return (
     <ol>
       {order.map((c) => (

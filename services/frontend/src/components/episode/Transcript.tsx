@@ -3,7 +3,7 @@ import { Gloss } from "#components/ui/Gloss";
 import { Timestamp } from "#components/ui/Timestamp";
 import { arabic } from "#lib/format";
 
-export const sectionAnchor = (idx: number) => `section-${idx}`;
+const sectionAnchor = (idx: number) => `section-${idx}`;
 
 const sectionTitle = (s: TranscriptSection) => s.title?.trim() || `الجزء ${arabic(s.idx)}`;
 

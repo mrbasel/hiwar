@@ -307,14 +307,13 @@ export function ranked(index: Index, docs: Uint32Array, q: Float32Array, m: numb
     }
     scores[doc] = (a + b + c + d) * scales[doc];
   }
-  return candidates.sort((x, y) => scores[y] - scores[x]).subarray(0, m);
+  return candidates.toSorted((x, y) => scores[y] - scores[x]).subarray(0, m);
 }
 
 export async function semanticSearch(
-  index: Index,
+  { index, embed }: Semantic,
   query: string,
   k: number,
-  embed: Embedder,
   filter: DocFilter = {},
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);

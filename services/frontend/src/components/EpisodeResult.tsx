@@ -6,10 +6,11 @@ import type { Episode, Moment, SearchHit } from "#api/search";
 import { EpisodeMeta } from "#components/episode/EpisodeMeta";
 import { buttonClass } from "#components/ui/Button";
 import { Tag } from "#components/ui/Tag";
-import { Thumbnail, videoId } from "#components/ui/Thumbnail";
+import { Thumbnail } from "#components/ui/Thumbnail";
 import { Timestamp } from "#components/ui/Timestamp";
 import { useDevMode } from "#lib/devMode";
 import { arabic, cn } from "#lib/format";
+import { videoId } from "#lib/youtube";
 
 const MATCH_LABEL = { keyword: "تطابق لفظي", semantic: "تطابق في المعنى" } as const;
 

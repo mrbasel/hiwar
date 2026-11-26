@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useRecommendations } from "#api/episodes";
 import { EpisodeMeta } from "#components/episode/EpisodeMeta";
-import { Thumbnail, videoId } from "#components/ui/Thumbnail";
+import { Thumbnail } from "#components/ui/Thumbnail";
+import { videoId } from "#lib/youtube";
 
 const ROWS = 4;
 
@@ -18,7 +19,6 @@ export function RecommendedEpisodes({ episodeId }: { episodeId: string }) {
       ) : isPending ? (
         <ol aria-busy className="space-y-4">
           {Array.from({ length: ROWS }, (_, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: placeholders with nothing else to tell them apart
             <li key={i} className="flex gap-3">
               <div className="aspect-video w-28 shrink-0 animate-pulse rounded-control bg-sunken" />
               <div className="flex-1 space-y-2 pt-1">

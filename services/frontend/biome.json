@@ -19,11 +19,6 @@
     }
   },
   "linter": {
-    "rules": {
-      "preset": "recommended",
-      "security": {
-        "noDangerouslySetInnerHtml": "off"
-      }
-    }
+    "enabled": false
   }
 }

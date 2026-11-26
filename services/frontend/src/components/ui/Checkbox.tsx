@@ -9,7 +9,6 @@ export function Checkbox({
   ...props
 }: ComponentProps<typeof Base.Root> & { children?: ReactNode }) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control
     <label className={cn("inline-flex cursor-pointer items-center gap-2 text-sm", className)}>
       <Base.Root
         className="flex size-4.5 shrink-0 items-center justify-center rounded-mark border-[1.5px] border-faint bg-surface text-on-accent transition-colors duration-100 data-checked:border-accent data-checked:bg-accent"
