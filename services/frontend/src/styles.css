@@ -131,9 +131,8 @@
     *,
     ::before,
     ::after {
-      /* biome-ignore lint/complexity/noImportantStyles: has to beat utilities, which sit in a later layer */
+      /* !important has to beat utilities, which sit in a later layer */
       transition-duration: 0s !important;
-      /* biome-ignore lint/complexity/noImportantStyles: as above */
       animation-duration: 0s !important;
     }
   }

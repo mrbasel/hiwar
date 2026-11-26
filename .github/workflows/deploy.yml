@@ -57,6 +57,8 @@ jobs:
 
       - run: pnpm check
 
+      - run: pnpm lint
+
       - run: pnpm build
 
       # Without optional dependencies: transformers is only for the local

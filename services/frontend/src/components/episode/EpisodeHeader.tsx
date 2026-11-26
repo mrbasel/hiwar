@@ -2,7 +2,8 @@ import { Play } from "lucide-react";
 import type { EpisodeDetail } from "#api/episodes";
 import { EpisodeMeta } from "#components/episode/EpisodeMeta";
 import { buttonClass } from "#components/ui/Button";
-import { Thumbnail, videoId } from "#components/ui/Thumbnail";
+import { Thumbnail } from "#components/ui/Thumbnail";
+import { videoId } from "#lib/youtube";
 
 export function EpisodeHeader({ episode }: { episode: EpisodeDetail }) {
   return (

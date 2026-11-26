@@ -65,7 +65,6 @@ export function ShowPicker({ value, onChange }: { value: string[]; onChange: (id
               className="max-h-80 min-h-0 overflow-y-auto py-1"
             >
               {visible.map((show) => (
-                // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders the control
                 <label
                   key={show.id}
                   className="flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-sunken"

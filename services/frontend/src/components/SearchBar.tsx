@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Search, SlidersHorizontal } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import type { Mode, SearchParams } from "#api/search";
 import { DateFilter } from "#components/DateFilter";
 import { DevModeToggle } from "#components/DevModeToggle";
@@ -21,7 +21,11 @@ export function SearchBar({
 }) {
   const [text, setText] = useState(params.q);
   // Follow the URL on back and forward.
-  useEffect(() => setText(params.q), [params.q]);
+  const [query, setQuery] = useState(params.q);
+  if (params.q !== query) {
+    setQuery(params.q);
+    setText(params.q);
+  }
   const filtered = params.mode !== "hybrid" || params.shows.length > 0 || params.date !== "all";
   const [showFilters, setShowFilters] = useState(filtered);
   const filtersId = useId();
