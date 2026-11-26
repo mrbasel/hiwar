@@ -18,16 +18,19 @@ const toggleClass = cn(buttonClass("quiet", "sm"), "-ms-3 text-muted hover:text-
 
 const quoteClass = "font-read text-[1.1rem] leading-[1.6] sm:text-[1.3rem]";
 
+const quoted = (html: string) => `<span class="ctx">"</span>${html}<span class="ctx">"</span>`;
+
 const momentHtml = (m: Moment) =>
-  `<span class="ctx">${m.before}</span> ${m.html} <span class="ctx">${m.after}</span>`;
+  quoted(`<span class="ctx">${m.before}</span> ${m.html} <span class="ctx">${m.after}</span>`);
 
 export function EpisodeResult({ episode, hits }: { episode: Episode; hits: SearchHit[] }) {
   const [devMode] = useDevMode();
   const via = new Set(hits.flatMap((h) => h.matched_by ?? []));
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  const [descOpen, setDescOpen] = useState(!episode.has_transcript);
+  const [descOpen, setDescOpen] = useState(false);
   const moment = hits.find((h) => h.moments.length)?.moments[0];
   const snippet = hits.find((h) => h.snippet)?.snippet;
+  const hasQuote = episode.has_transcript && (moment || snippet);
 
   return (
     <article className="py-5">
@@ -48,7 +51,7 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
             />
           </h2>
 
-          {!sectionsOpen && episode.has_transcript && (moment || snippet) && (
+          {!sectionsOpen && hasQuote && (
             <p className={cn("mt-1.5 line-clamp-2", quoteClass)}>
               {moment ? (
                 <>
@@ -59,9 +62,15 @@ export function EpisodeResult({ episode, hits }: { episode: Episode; hits: Searc
                   />
                 </>
               ) : (
-                <span className="text-muted" dangerouslySetInnerHTML={{ __html: snippet ?? "" }} />
+                <span className="text-muted" dangerouslySetInnerHTML={{ __html: quoted(snippet ?? "") }} />
               )}
             </p>
+          )}
+          {!sectionsOpen && !hasQuote && episode.description_html && (
+            <p
+              className={cn("mt-1.5 line-clamp-2 text-muted", quoteClass)}
+              dangerouslySetInnerHTML={{ __html: episode.description_html }}
+            />
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -153,7 +162,10 @@ function Section({ episodeId, hit }: { episodeId: string; hit: SearchHit }) {
         </p>
       ))}
       {!hit.moments.length && hit.snippet && (
-        <p className={cn("mt-1 text-muted", quoteClass)} dangerouslySetInnerHTML={{ __html: hit.snippet }} />
+        <p
+          className={cn("mt-1 text-muted", quoteClass)}
+          dangerouslySetInnerHTML={{ __html: quoted(hit.snippet) }}
+        />
       )}
     </section>
   );
