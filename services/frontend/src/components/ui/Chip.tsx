@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react";
 import { cn } from "#lib/format";
 
 // A filter that narrows results, such as the channel picker. Active when it
@@ -10,7 +9,3 @@ export const chipClass = (active = false) =>
       ? "border-accent bg-accent-wash font-medium text-accent"
       : "border-rule bg-surface text-muted hover:border-ink/40 hover:text-ink",
   );
-
-export function Chip({ active, className, ...props }: ComponentProps<"button"> & { active?: boolean }) {
-  return <button type="button" className={cn(chipClass(active), className)} {...props} />;
-}
