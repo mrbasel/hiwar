@@ -43,7 +43,7 @@ export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p:
                 type="search"
                 value={text}
                 onValueChange={setText}
-                placeholder="ابحث في كل ما قيل…"
+                placeholder="ابحث في أكثر من 15,000 حلقة…"
                 autoFocus
                 aria-label="ابحث"
                 className="pe-16"
