@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useId, useState } from "react";
-import type { Mode, SearchParams } from "#api/search";
+import type { SearchParams } from "#api/search";
 import { DateFilter } from "#components/DateFilter";
 import { DevModeToggle } from "#components/DevModeToggle";
 import { ShowPicker } from "#components/ShowPicker";
 import { ThemeToggle } from "#components/ThemeToggle";
 import { IconButton } from "#components/ui/Button";
-import { Segment, Segmented } from "#components/ui/Radio";
+import { Checkbox } from "#components/ui/Checkbox";
 import { TextField } from "#components/ui/TextField";
 import { cn } from "#lib/format";
 
@@ -92,15 +92,13 @@ export function SearchBar({
       </div>
       <div id={filtersId} hidden={!showFilters} className="-mx-4 border-t border-rule px-4 sm:-mx-8 sm:px-8">
         <div className="flex flex-wrap items-center gap-3 py-3 sm:ps-28">
-          <Segmented
-            value={params.mode}
-            onValueChange={(mode) => search({ mode: mode as Mode })}
-            aria-label="نوع البحث"
+          <Checkbox
+            checked={params.mode === "keyword"}
+            onCheckedChange={(checked) => search({ mode: checked ? "keyword" : "hybrid" })}
             className="whitespace-nowrap"
           >
-            <Segment value="hybrid">بالمعنى والكلمات</Segment>
-            <Segment value="keyword">بالكلمات فقط</Segment>
-          </Segmented>
+            تطابق حرفي
+          </Checkbox>
           <ShowPicker value={params.shows} onChange={(shows) => search({ shows })} />
           <DateFilter value={params} onChange={search} />
         </div>
