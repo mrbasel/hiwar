@@ -1,4 +1,4 @@
-export const BASE = "/api";
+const BASE = "/api";
 
 export class ApiError extends Error {
   readonly status: number;

@@ -118,49 +118,6 @@ def scan_data(conn, data_dir, pool):
     return errors
 
 
-def import_legacy(conn):
-    """On the first run against a database from the old pipeline (episodes but no
-    videos): carry over what its state files knew.
-
-    done.txt listed every video already looked at; the ones without files had
-    no Arabic track (no_arabic_subs.txt) or are otherwise gone, so they're
-    recorded as 'no_captions' and never fetched again, like before. Channels
-    in logs/channels_no_captions.txt stay skipped, and sources the old
-    pipeline already downloaded skip the PROBE check.
-    """
-    done = ROOT / "done.txt"
-    if done.exists():
-        known = {row[0] for row in conn.execute("SELECT id FROM videos")}
-        no_arabic = {}
-        if (ROOT / "no_arabic_subs.txt").exists():
-            for line in (ROOT / "no_arabic_subs.txt").read_text(encoding="utf-8").splitlines():
-                parts = line.split("\t")
-                if parts[0]:
-                    no_arabic[parts[0]] = parts[1] if len(parts) > 1 else None
-        n = 0
-        for line in done.read_text(encoding="utf-8").splitlines():
-            parts = line.split()
-            if len(parts) != 2 or parts[1] in known:
-                continue
-            known.add(parts[1])
-            reason = "no Arabic track" if parts[1] in no_arabic else "in done.txt without files"
-            db.save_video(conn, {"id": parts[1], "channel_id": None, "path": None,
-                                 "upload_date": no_arabic.get(parts[1]), "status": "no_captions",
-                                 "reason": reason})
-            n += 1
-        log(f"imported {n} videos without files from done.txt")
-    for (url,) in conn.execute("SELECT url FROM sources").fetchall():
-        if (ROOT / "logs" / f"channel_{label(url)}.log").exists():
-            conn.execute("UPDATE sources SET captions_seen = 1 WHERE url = ?", (url,))
-    no_captions = ROOT / "logs" / "channels_no_captions.txt"
-    if no_captions.exists():
-        for handle in no_captions.read_text(encoding="utf-8").split():
-            conn.execute("UPDATE sources SET status = 'no_captions' WHERE lower(url) LIKE ?",
-                         (f"%/{handle.lower()}",))
-    db.write_build_info(conn, {"legacy_imported": db.now()})
-    conn.commit()
-
-
 def write_archive(conn, path):
     """yt-dlp download archive with every video in the database."""
     with open(path, "w") as f:
@@ -402,12 +359,8 @@ def main():
     errors, blocked = [], False
     log_dir = ROOT / "logs" / "sources"
     log_dir.mkdir(parents=True, exist_ok=True)
-    legacy = (conn.execute("SELECT count(*) FROM videos").fetchone()[0] == 0
-              and conn.execute("SELECT count(*) FROM episodes").fetchone()[0] > 0)
     with Pool(args.workers) as pool:
         errors += scan_data(conn, data_dir, pool)
-        if legacy:
-            import_legacy(conn)
         if not args.no_download:
             blocked = retry_failed(conn, data_dir, log_dir)
             if not blocked:
@@ -440,7 +393,6 @@ def main():
         "counts": counts,
         "words": words,
         "last_run": run,
-        **({"legacy_imported": old["legacy_imported"]} if "legacy_imported" in old else {}),
     })
     conn.commit()
     conn.execute("PRAGMA optimize")
