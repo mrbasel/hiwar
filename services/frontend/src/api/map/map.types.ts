@@ -3,7 +3,7 @@ export const mapKeys = {
 };
 
 // Points are [id, x, y, cluster, channel index, title, date], x and y in 0..1.
-export type MapPoint = [string, number, number, number, number, string, string];
+type MapPoint = [string, number, number, number, number, string, string];
 
 export interface MapCluster {
   id: number;

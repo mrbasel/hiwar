@@ -20,17 +20,3 @@ export function Gloss({
     </div>
   );
 }
-
-// A quoted moment of speech. `html` is pre-escaped with <mark> highlights;
-// the words around the match are quieter than the match itself.
-export function Quote({ html, size = "base" }: { html: string; size?: "base" | "lg" }) {
-  return (
-    <p
-      className={cn(
-        "m-0 font-read text-ink [&_.ctx]:text-muted",
-        size === "lg" ? "text-read-lg" : "text-read",
-      )}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-}

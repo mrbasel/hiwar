@@ -11,10 +11,6 @@ export const episodeQuery = (id: string) =>
     retry: false,
   });
 
-export function useEpisode(id: string) {
-  return useQuery(episodeQuery(id));
-}
-
 export function useRecommendations(id: string) {
   return useQuery({
     queryKey: episodeKeys.recommendations(id),

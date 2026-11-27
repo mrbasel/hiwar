@@ -10,8 +10,6 @@ __pycache__/
 data/
 logs/
 survey/
-done.txt
-no_arabic_subs.txt
 
 # Database (built and updated by scripts/update.sh)
 *.db

@@ -1,4 +1,4 @@
-export type Mode = "hybrid" | "keyword";
+type Mode = "hybrid" | "keyword";
 
 export type DateRange = "all" | "day" | "week" | "month" | "year" | "custom";
 

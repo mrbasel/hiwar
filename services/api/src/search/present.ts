@@ -15,7 +15,7 @@ function splitWords(text: string): string[] {
   return text.split(/([\p{L}\p{N}\p{M}]+)/u);
 }
 
-export function highlight(text: string, terms: string[]): string {
+function highlight(text: string, terms: string[]): string {
   const set = new Set(terms);
   return splitWords(text)
     .map((part, i) => {
@@ -56,7 +56,7 @@ function findMoments(segments: Segment[], terms: string[], url: string) {
 
 // The SNIPPET_WORDS words of the text with the most distinct terms in them,
 // highlighted, like FTS5's snippet(); undefined if no term is in the text.
-export function snippet(text: string, terms: string[]): string | undefined {
+function snippet(text: string, terms: string[]): string | undefined {
   const parts = splitWords(text);
   const termOf = (n: number) => terms.indexOf(words(parts[2 * n + 1])[0] ?? "");
   const found = Array.from({ length: (parts.length - 1) / 2 }, (_, n) => termOf(n));

@@ -6,7 +6,7 @@ const FROM = "\u0623\u0625\u0622\u0671\u0629\u0649" + "٠١٢٣٤٥٦٧٨٩" + "
 const TO = "\u0627\u0627\u0627\u0627\u0647\u064A" + "0123456789" + "0123456789";
 const LETTERS = new Map([...FROM].map((ch, i) => [ch, TO[i]]));
 
-export function normalize(text: string): string {
+function normalize(text: string): string {
   let out = "";
   for (const ch of text.replace(DIACRITICS, "")) out += LETTERS.get(ch) ?? ch;
   return out.toLowerCase();
