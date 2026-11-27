@@ -5,11 +5,13 @@ import { semantic } from "./bootstrap.js";
 import { config } from "./config.js";
 import { watch } from "./db/watch.js";
 import { clearRecommendations } from "./episodes/recommend.js";
+import { requestLog } from "./http/log.js";
 import { api } from "./http/routes.js";
 import { refreshIndex } from "./search/semantic.js";
 
 const app = express();
 if (config.trustProxy) app.set("trust proxy", 1);
+app.use(requestLog);
 app.use(compression());
 app.use("/api", api);
 app.use(express.static(config.publicDir));
