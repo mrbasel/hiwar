@@ -35,8 +35,20 @@ api.get("/search", limit(30), async (req, res) => {
     startDate: str(req.query.startDate),
     endDate: str(req.query.endDate),
   };
+  res.locals.log = {
+    search: {
+      q: params.q,
+      requested: params.mode,
+      page: params.page,
+      shows: params.shows?.length ?? 0,
+      startDate: params.startDate ?? null,
+      endDate: params.endDate ?? null,
+    },
+  };
   try {
-    res.json(await search(params));
+    const result = await search(params);
+    Object.assign(res.locals.log.search, { mode: result.mode, total: result.total });
+    res.json(result);
   } catch (err) {
     if (err instanceof QueryError) res.status(400).json({ error: err.message });
     else throw err;
