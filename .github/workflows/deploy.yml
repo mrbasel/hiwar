@@ -65,7 +65,7 @@ jobs:
       # embedder, and the server embeds queries with Workers AI.
       - name: Bundle the release
         run: |
-          pnpm --filter rawi-api deploy --legacy --prod --no-optional release/api
+          pnpm --filter hiwar-api deploy --legacy --prod --no-optional release/api
           cp -r services/frontend/dist/client release/public
           mkdir release/pipeline
           cp pipeline/*.py release/pipeline/

@@ -31,7 +31,7 @@ def embed(model, texts, key, tries=10):
     req = urllib.request.Request(
         API, data=json.dumps({"model": model, "input": texts}).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                 "User-Agent": "rawi-search/0.1"},  # the default Python agent is blocked
+                 "User-Agent": "hiwar-search/0.1"},  # the default Python agent is blocked
     )
     for attempt in range(tries):
         try:

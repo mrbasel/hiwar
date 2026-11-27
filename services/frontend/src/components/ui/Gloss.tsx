@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "#lib/format";
 
-// Rawi's one signature layout: what was said, read in the main column, with
+// Hiwar's one signature layout: what was said, read in the main column, with
 // where it was said kept in the start margin like a gloss in a manuscript.
 // On narrow screens the margin folds above the text.
 export function Gloss({
