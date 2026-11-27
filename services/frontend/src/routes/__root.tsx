@@ -16,7 +16,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "بحث في البودكاست" },
     ],
-    links: [{ rel: "stylesheet", href: styles }],
+    links: [
+      { rel: "stylesheet", href: styles },
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+    ],
     scripts: [{ children: themeScript }, ...(DEV ? [{ children: devModeScript }] : [])],
   }),
   component: Root,
