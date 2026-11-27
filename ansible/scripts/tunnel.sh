@@ -2,8 +2,8 @@
 #
 # tunnel.sh — create or update the site's Cloudflare Tunnel, from this machine
 #
-# Makes sure the account has a tunnel named $TUNNEL, routes $HOSTNAME through
-# it to the app, and points $HOSTNAME's DNS record at it; changes nothing
+# Makes sure the account has a tunnel named $TUNNEL, routes each of $HOSTNAMES
+# through it to the app, and points their DNS records at it; changes nothing
 # that's already right. Prints the tunnel's token, which cloudflared on the
 # server runs with: keep it in host_vars/rawi/vault.yml as vault_tunnel_token.
 #
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 TUNNEL=rawi
-HOSTNAME=podcasts.baselalnassr.com
+HOSTNAMES=(hiwar.baselalnassr.com podcasts.baselalnassr.com)
 ZONE=baselalnassr.com
 SERVICE=http://localhost:3000
 
@@ -52,21 +52,24 @@ else
   echo "tunnel $TUNNEL exists ($id)" >&2
 fi
 
-config=$(jq -n --arg host "$HOSTNAME" --arg service "$SERVICE" \
-  '{config: {ingress: [{hostname: $host, service: $service}, {service: "http_status:404"}]}}')
+config=$(jq -n --arg service "$SERVICE" '$ARGS.positional as $hosts |
+  {config: {ingress: ([$hosts[] | {hostname: ., service: $service}] + [{service: "http_status:404"}])}}' \
+  --args "${HOSTNAMES[@]}")
 cf PUT "/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$id/configurations" --data "$config" >/dev/null
-echo "routes $HOSTNAME to $SERVICE" >&2
+echo "routes ${HOSTNAMES[*]} to $SERVICE" >&2
 
 zone=$(cf GET "/zones?name=$ZONE" | jq -r '.[0].id')
-record=$(jq -n --arg name "$HOSTNAME" --arg target "$id.cfargotunnel.com" \
-  '{type: "CNAME", name: $name, content: $target, proxied: true, comment: "rawi tunnel (ansible/scripts/tunnel.sh)"}')
-existing=$(cf GET "/zones/$zone/dns_records?name=$HOSTNAME" | jq -r '.[0].id // empty')
-if [[ -z $existing ]]; then
-  cf POST "/zones/$zone/dns_records" --data "$record" >/dev/null
-  echo "created the DNS record for $HOSTNAME" >&2
-else
-  cf PUT "/zones/$zone/dns_records/$existing" --data "$record" >/dev/null
-  echo "updated the DNS record for $HOSTNAME" >&2
-fi
+for hostname in "${HOSTNAMES[@]}"; do
+  record=$(jq -n --arg name "$hostname" --arg target "$id.cfargotunnel.com" \
+    '{type: "CNAME", name: $name, content: $target, proxied: true, comment: "rawi tunnel (ansible/scripts/tunnel.sh)"}')
+  existing=$(cf GET "/zones/$zone/dns_records?name=$hostname" | jq -r '.[0].id // empty')
+  if [[ -z $existing ]]; then
+    cf POST "/zones/$zone/dns_records" --data "$record" >/dev/null
+    echo "created the DNS record for $hostname" >&2
+  else
+    cf PUT "/zones/$zone/dns_records/$existing" --data "$record" >/dev/null
+    echo "updated the DNS record for $hostname" >&2
+  fi
+done
 
 cf GET "/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$id/token" | jq -r .
