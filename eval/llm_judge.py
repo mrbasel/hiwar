@@ -105,7 +105,7 @@ def post(path, body, key, tries=4):
     req = urllib.request.Request(
         API + path, data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                 "User-Agent": "rawi-eval/0.1"},  # the default Python agent is blocked
+                 "User-Agent": "hiwar-eval/0.1"},  # the default Python agent is blocked
     )
     for attempt in range(tries):
         try:

@@ -1,6 +1,6 @@
-# Rawi design system
+# Hiwar design system
 
-Rawi searches what was said in Arabic podcasts. Its job is to get someone to the
+Hiwar searches what was said in Arabic podcasts. Its job is to get someone to the
 moment a thing was said, so the transcript is the content and everything else
 is apparatus around it.
 

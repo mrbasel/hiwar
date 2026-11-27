@@ -26,7 +26,7 @@ export function Home({ params, onSearch }: { params: SearchParams; onSearch: (p:
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 pt-[18vh] pb-16">
-        <h1 className="text-center text-[clamp(3.5rem,12vw,6rem)] leading-tight font-bold">راوي</h1>
+        <h1 className="text-center text-[clamp(3.5rem,12vw,6rem)] leading-tight font-bold">حوار</h1>
         <p className="mt-8 mb-10 text-center text-lg text-muted">محرك بحث للبودكستات العربية</p>
 
         <search>

@@ -1,5 +1,5 @@
 [project]
-name = "rawi"
+name = "hiwar"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 # What the server's pipeline (pipeline.ingest, pipeline.worker) needs.

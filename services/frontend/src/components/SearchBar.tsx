@@ -38,10 +38,10 @@ export function SearchBar({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-4 sm:flex-nowrap sm:gap-4">
         <Link
           to="/"
-          aria-label="راوي: الصفحة الرئيسية"
+          aria-label="حوار: الصفحة الرئيسية"
           className="shrink-0 text-3xl font-bold text-ink no-underline max-sm:hidden sm:w-24"
         >
-          راوي
+          حوار
         </Link>
         <search className="min-w-0 max-w-2xl flex-1">
           <form
