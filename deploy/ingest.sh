@@ -14,5 +14,6 @@ set -a
 set +a
 # The API's user shares the database through the deploy group.
 umask 002
+export PYTHONDONTWRITEBYTECODE=1
 cd /srv/rawi/current
 exec .venv/bin/python -m pipeline.ingest "$@"
