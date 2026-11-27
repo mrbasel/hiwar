@@ -57,7 +57,7 @@ export function SearchBar({
               type="search"
               value={text}
               onValueChange={setText}
-              placeholder="ابحث في كل ما قيل…"
+              placeholder="ابحث في أكثر من 15,000 حلقة…"
               aria-label="ابحث"
               className="h-12 ps-5 pe-13 text-lg"
             />
