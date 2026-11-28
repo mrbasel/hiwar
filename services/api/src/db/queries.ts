@@ -40,7 +40,6 @@ const HIT_COLUMNS = `s.id, s.idx, s.title, s.start_time, s.end_time,
   e.description, e.transcript_source`;
 
 export interface Scope {
-  shows: string[];
   startDate?: string;
   endDate?: string;
 }
@@ -48,7 +47,6 @@ export interface Scope {
 // Bind the match, then scopeArgs().
 function ftsFrom(scope: Scope): string {
   const where = ["sections_fts MATCH ?"];
-  if (scope.shows.length) where.push(`e.channel_id IN (${placeholders(scope.shows.length)})`);
   if (scope.startDate) where.push("e.date >= ?");
   if (scope.endDate) where.push("e.date <= ?");
   return `
@@ -59,7 +57,7 @@ function ftsFrom(scope: Scope): string {
 }
 
 function scopeArgs(scope: Scope): string[] {
-  return [scope.shows, scope.startDate ?? [], scope.endDate ?? []].flat();
+  return [scope.startDate ?? [], scope.endDate ?? []].flat();
 }
 
 export function countMatchingEpisodes(match: string, scope: Scope): number {
@@ -143,16 +141,6 @@ export function publishedAt(): string | null {
     .prepare("SELECT value FROM build_info WHERE key IN ('published_at', 'exported_at') ORDER BY key DESC LIMIT 1")
     .get();
   return row ? JSON.parse(row.value as string) : null;
-}
-
-export function listShows() {
-  return db
-    .prepare(
-      `SELECT c.id, trim(c.name) AS name, count(*) AS episodes
-       FROM episodes e JOIN channels c ON c.id = e.channel_id
-       GROUP BY c.id ORDER BY episodes DESC, name`,
-    )
-    .all();
 }
 
 export interface EpisodeRow {

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { semantic } from "../bootstrap.js";
 import { config } from "../config.js";
-import { episodeById, listShows, publishedAt } from "../db/queries.js";
+import { episodeById, publishedAt } from "../db/queries.js";
 import { presentEpisode } from "../episodes/present.js";
 import { recommendations } from "../episodes/recommend.js";
 import { QueryError, search, type SearchParams } from "../search/service.js";
@@ -31,7 +31,6 @@ api.get("/search", limit(30), async (req, res) => {
     page: Number(req.query.page) || 1,
     limit: Number(req.query.limit) || 20,
     mode: req.query.mode === "keyword" ? "keyword" : "hybrid",
-    shows: str(req.query.shows)?.split(",").map((s) => s.trim()).filter(Boolean),
     startDate: str(req.query.startDate),
     endDate: str(req.query.endDate),
   };
@@ -40,7 +39,6 @@ api.get("/search", limit(30), async (req, res) => {
       q: params.q,
       requested: params.mode,
       page: params.page,
-      shows: params.shows?.length ?? 0,
       startDate: params.startDate ?? null,
       endDate: params.endDate ?? null,
     },
@@ -63,10 +61,6 @@ api.get("/health", (_req, res) => {
     vectors: semantic?.index.live.length ?? 0,
     semantic: semantic !== undefined,
   });
-});
-
-api.get("/shows", (_req, res) => {
-  res.json(listShows());
 });
 
 api.get("/episodes/:id", (req, res) => {

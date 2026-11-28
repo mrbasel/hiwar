@@ -11,7 +11,6 @@ export interface SearchParams {
   page?: number;
   limit?: number; // episodes per page
   mode?: "hybrid" | "keyword";
-  shows?: string[]; // every channel if empty
   startDate?: string; // YYYY-MM-DD
   endDate?: string;
 }
@@ -30,7 +29,6 @@ function parse(params: SearchParams) {
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
   const page = Math.max(params.page ?? 1, 1);
   const scope: Scope = {
-    shows: [...new Set(params.shows ?? [])],
     startDate: day(params.startDate, "startDate"),
     endDate: day(params.endDate, "endDate"),
   };
@@ -90,13 +88,12 @@ function bm25Search(params: SearchParams) {
 }
 
 // Both rankings are filtered before taking their top RRF_DEPTH, so small
-// channels and short ranges aren't crowded out.
+// ranges aren't crowded out.
 async function hybridSearch(params: SearchParams, loaded: Semantic) {
   const started = performance.now();
   const { parsed, limit, page, scope } = parse(params);
   const bm25Ids = fts(() => queries.bm25SectionIds(parsed.match, scope, RRF_DEPTH));
   const semanticIds = await semanticSearch(loaded, params.q, RRF_DEPTH, {
-    channels: scope.shows.length ? new Set(scope.shows) : undefined,
     startDate: scope.startDate,
     endDate: scope.endDate,
   });

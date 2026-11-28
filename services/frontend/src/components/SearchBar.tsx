@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 import type { SearchParams } from "#api/search";
 import { DateFilter } from "#components/DateFilter";
 import { DevModeToggle } from "#components/DevModeToggle";
-import { ShowPicker } from "#components/ShowPicker";
 import { ThemeToggle } from "#components/ThemeToggle";
 import { IconButton } from "#components/ui/Button";
 import { Checkbox } from "#components/ui/Checkbox";
@@ -26,7 +25,7 @@ export function SearchBar({
     setQuery(params.q);
     setText(params.q);
   }
-  const filtered = params.mode !== "hybrid" || params.shows.length > 0 || params.date !== "all";
+  const filtered = params.mode !== "hybrid" || params.date !== "all";
   const [showFilters, setShowFilters] = useState(filtered);
   const filtersId = useId();
 
@@ -99,7 +98,6 @@ export function SearchBar({
           >
             تطابق حرفي
           </Checkbox>
-          <ShowPicker value={params.shows} onChange={(shows) => search({ shows })} />
           <DateFilter value={params} onChange={search} />
         </div>
       </div>
