@@ -38,7 +38,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # DEPLOY_SSH_KEY (secret), DEPLOY_HOST and DEPLOY_KNOWN_HOSTS (variables)
+    # DEPLOY_SSH_KEY, DEPLOY_HOST and DEPLOY_KNOWN_HOSTS (secrets). The host is
+    # a secret too, so it's masked in the run logs, which are public.
     environment:
       name: production
       url: https://podcasts.baselalnassr.com
@@ -74,8 +75,8 @@ jobs:
       - name: Upload and activate the release
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
