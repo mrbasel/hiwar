@@ -6,7 +6,6 @@ export interface SearchParams {
   q: string;
   page: number;
   mode: Mode;
-  shows: string[]; // every channel if empty
   date: DateRange;
   from?: string; // YYYY-MM-DD
   to?: string;

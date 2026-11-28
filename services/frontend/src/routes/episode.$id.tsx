@@ -12,7 +12,7 @@ import { Transcript } from "#components/episode/Transcript";
 import { SearchBar } from "#components/SearchBar";
 import { Tab, TabList, TabPanel, Tabs } from "#components/ui/Tabs";
 
-const NEW_SEARCH: SearchParams = { q: "", page: 1, mode: "hybrid", shows: [], date: "all" };
+const NEW_SEARCH: SearchParams = { q: "", page: 1, mode: "hybrid", date: "all" };
 
 const TABS = ["description", "transcript"] as const;
 type EpisodeTab = (typeof TABS)[number];

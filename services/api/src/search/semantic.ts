@@ -55,7 +55,6 @@ export interface Index {
 }
 
 export interface DocFilter {
-  channels?: Set<string>;
   startDate?: string;
   endDate?: string;
 }
@@ -317,10 +316,9 @@ export async function semanticSearch(
   filter: DocFilter = {},
 ): Promise<number[]> {
   const q = await embedQuery(embed, query);
-  const { channels, startDate, endDate } = filter;
+  const { startDate, endDate } = filter;
   const { sections } = index;
   let docs = index.live;
-  if (channels) docs = docs.filter((i) => channels.has(index.channels[i]));
   if (startDate) docs = docs.filter((i) => index.dates[i] >= startDate);
   if (endDate) docs = docs.filter((i) => index.dates[i] <= endDate);
 

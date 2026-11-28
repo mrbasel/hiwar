@@ -16,7 +16,6 @@ export function useSearchResults(params: SearchParams) {
       const url = new URLSearchParams({ q: params.q });
       if (params.page > 1) url.set("page", String(params.page));
       if (params.mode === "keyword") url.set("mode", "keyword");
-      if (params.shows.length) url.set("shows", params.shows.join(","));
       const { startDate, endDate } = dateBounds(params);
       if (startDate) url.set("startDate", startDate);
       if (endDate) url.set("endDate", endDate);

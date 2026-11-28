@@ -1,6 +1,6 @@
 import { cn } from "#lib/format";
 
-// A filter that narrows results, such as the channel picker. Active when it
+// A filter that narrows results, such as the date filter. Active when it
 // is set to something other than its default, and pressed while its popup is open.
 export const chipClass = (active = false) =>
   cn(
